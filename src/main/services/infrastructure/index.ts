@@ -14,3 +14,4 @@ export * from './DataCache';
 export * from './FileWatcher';
 export * from './NotificationManager';
 export * from './TriggerManager';
+export * from './UpdaterService';

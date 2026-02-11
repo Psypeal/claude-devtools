@@ -15,6 +15,7 @@ import type { SubagentSlice } from './slices/subagentSlice';
 import type { TabSlice } from './slices/tabSlice';
 import type { TabUISlice } from './slices/tabUISlice';
 import type { UISlice } from './slices/uiSlice';
+import type { UpdateSlice } from './slices/updateSlice';
 
 // =============================================================================
 // Shared Types
@@ -84,4 +85,5 @@ export type AppState = ProjectSlice &
   PaneSlice &
   UISlice &
   NotificationSlice &
-  ConfigSlice;
+  ConfigSlice &
+  UpdateSlice;

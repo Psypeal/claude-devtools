@@ -44,6 +44,7 @@ import {
   ProjectScanner,
   SessionParser,
   SubagentResolver,
+  UpdaterService,
 } from './services';
 
 // =============================================================================
@@ -60,6 +61,7 @@ let chunkBuilder: ChunkBuilder;
 let dataCache: DataCache;
 let fileWatcher: FileWatcher;
 let notificationManager: NotificationManager;
+let updaterService: UpdaterService;
 let cleanupInterval: NodeJS.Timeout | null = null;
 
 /**
@@ -75,11 +77,19 @@ function initializeServices(): void {
   chunkBuilder = new ChunkBuilder();
   const disableCache = process.env.CLAUDE_CONTEXT_DISABLE_CACHE === '1';
   dataCache = new DataCache(MAX_CACHE_SESSIONS, CACHE_TTL_MINUTES, !disableCache);
+  updaterService = new UpdaterService();
 
   logger.info(`Projects directory: ${projectScanner.getProjectsDir()}`);
 
   // Initialize IPC handlers
-  initializeIpcHandlers(projectScanner, sessionParser, subagentResolver, chunkBuilder, dataCache);
+  initializeIpcHandlers(
+    projectScanner,
+    sessionParser,
+    subagentResolver,
+    chunkBuilder,
+    dataCache,
+    updaterService
+  );
 
   // Initialize notification manager using singleton pattern
   // This ensures IPC handlers and FileWatcher use the same instance
@@ -171,10 +181,12 @@ function createWindow(): void {
     void mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
   }
 
-  // Set traffic light position + notify renderer on first load
+  // Set traffic light position + notify renderer on first load, and auto-check for updates
   mainWindow.webContents.on('did-finish-load', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       syncTrafficLightPosition(mainWindow);
+      // Auto-check for updates 3 seconds after window loads
+      setTimeout(() => updaterService.checkForUpdates(), 3000);
     }
   });
 
@@ -214,9 +226,12 @@ function createWindow(): void {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
-    // Clear main window reference from notification manager
+    // Clear main window references
     if (notificationManager) {
       notificationManager.setMainWindow(null);
+    }
+    if (updaterService) {
+      updaterService.setMainWindow(null);
     }
   });
 
@@ -226,9 +241,12 @@ function createWindow(): void {
     // Could show an error dialog or attempt to reload the window
   });
 
-  // Set main window reference for notification manager
+  // Set main window reference for notification manager and updater
   if (notificationManager) {
     notificationManager.setMainWindow(mainWindow);
+  }
+  if (updaterService) {
+    updaterService.setMainWindow(mainWindow);
   }
 
   logger.info('Main window created');

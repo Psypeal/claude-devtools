@@ -16,9 +16,11 @@ import { createSubagentSlice } from './slices/subagentSlice';
 import { createTabSlice } from './slices/tabSlice';
 import { createTabUISlice } from './slices/tabUISlice';
 import { createUISlice } from './slices/uiSlice';
+import { createUpdateSlice } from './slices/updateSlice';
 
 import type { DetectedError } from '../types/data';
 import type { AppState } from './types';
+import type { UpdaterStatus } from '@shared/types';
 
 // =============================================================================
 // Store Creation
@@ -37,6 +39,7 @@ export const useStore = create<AppState>()((...args) => ({
   ...createUISlice(...args),
   ...createNotificationSlice(...args),
   ...createConfigSlice(...args),
+  ...createUpdateSlice(...args),
 }));
 
 // =============================================================================
@@ -219,6 +222,51 @@ export function initializeNotificationListeners(): () => void {
           // Use refreshSessionInPlace to avoid flickering and preserve UI state
           scheduleSessionRefresh(event.projectId, event.sessionId);
         }
+      }
+    });
+    if (typeof cleanup === 'function') {
+      cleanupFns.push(cleanup);
+    }
+  }
+
+  // Listen for updater status events from main process
+  if (window.electronAPI.updater?.onStatus) {
+    const cleanup = window.electronAPI.updater.onStatus((_event: unknown, status: unknown) => {
+      const s = status as UpdaterStatus;
+      switch (s.type) {
+        case 'checking':
+          useStore.setState({ updateStatus: 'checking' });
+          break;
+        case 'available':
+          useStore.setState({
+            updateStatus: 'available',
+            availableVersion: s.version ?? null,
+            releaseNotes: s.releaseNotes ?? null,
+            showUpdateDialog: true,
+          });
+          break;
+        case 'not-available':
+          useStore.setState({ updateStatus: 'not-available' });
+          break;
+        case 'downloading':
+          useStore.setState({
+            updateStatus: 'downloading',
+            downloadProgress: s.progress?.percent ?? 0,
+          });
+          break;
+        case 'downloaded':
+          useStore.setState({
+            updateStatus: 'downloaded',
+            downloadProgress: 100,
+            availableVersion: s.version ?? useStore.getState().availableVersion,
+          });
+          break;
+        case 'error':
+          useStore.setState({
+            updateStatus: 'error',
+            updateError: s.error ?? 'Unknown error',
+          });
+          break;
       }
     });
     if (typeof cleanup === 'function') {

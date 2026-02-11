@@ -22,8 +22,9 @@ mac:
   hardenedRuntime: true
   gatekeeperAssess: false
   icon: resources/icons/mac/icon.icns
-  notarize:
-    teamId: ${env.APPLE_TEAM_ID}
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  afterSign: scripts/notarize.cjs
 
 dmg:
   sign: false

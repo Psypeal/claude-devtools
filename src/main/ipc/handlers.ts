@@ -35,6 +35,11 @@ import {
   registerSubagentHandlers,
   removeSubagentHandlers,
 } from './subagents';
+import {
+  initializeUpdaterHandlers,
+  registerUpdaterHandlers,
+  removeUpdaterHandlers,
+} from './updater';
 import { registerUtilityHandlers, removeUtilityHandlers } from './utility';
 import { registerValidationHandlers, removeValidationHandlers } from './validation';
 
@@ -44,6 +49,7 @@ import type {
   ProjectScanner,
   SessionParser,
   SubagentResolver,
+  UpdaterService,
 } from '../services';
 
 /**
@@ -54,13 +60,15 @@ export function initializeIpcHandlers(
   parser: SessionParser,
   resolver: SubagentResolver,
   builder: ChunkBuilder,
-  cache: DataCache
+  cache: DataCache,
+  updater: UpdaterService
 ): void {
   // Initialize domain handlers with their required services
   initializeProjectHandlers(scanner);
   initializeSessionHandlers(scanner, parser, resolver, builder, cache);
   initializeSearchHandlers(scanner);
   initializeSubagentHandlers(builder, cache, parser, resolver);
+  initializeUpdaterHandlers(updater);
 
   // Register all handlers
   registerProjectHandlers(ipcMain);
@@ -71,6 +79,7 @@ export function initializeIpcHandlers(
   registerUtilityHandlers(ipcMain);
   registerNotificationHandlers(ipcMain);
   registerConfigHandlers(ipcMain);
+  registerUpdaterHandlers(ipcMain);
 
   logger.info('All handlers registered');
 }
@@ -88,6 +97,7 @@ export function removeIpcHandlers(): void {
   removeUtilityHandlers(ipcMain);
   removeNotificationHandlers(ipcMain);
   removeConfigHandlers(ipcMain);
+  removeUpdaterHandlers(ipcMain);
 
   logger.info('All handlers removed');
 }

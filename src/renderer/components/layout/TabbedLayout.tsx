@@ -10,6 +10,8 @@ import { getTrafficLightPaddingForZoom } from '@renderer/constants/layout';
 import { useKeyboardShortcuts } from '@renderer/hooks/useKeyboardShortcuts';
 import { useZoomFactor } from '@renderer/hooks/useZoomFactor';
 
+import { UpdateBanner } from '../common/UpdateBanner';
+import { UpdateDialog } from '../common/UpdateDialog';
 import { CommandPalette } from '../search/CommandPalette';
 
 import { PaneContainer } from './PaneContainer';
@@ -23,19 +25,23 @@ export const TabbedLayout = (): React.JSX.Element => {
 
   return (
     <div
-      className="flex h-screen bg-claude-dark-bg text-claude-dark-text"
+      className="flex h-screen flex-col bg-claude-dark-bg text-claude-dark-text"
       style={
         { '--macos-traffic-light-padding-left': `${trafficLightPadding}px` } as React.CSSProperties
       }
     >
-      {/* Command Palette (Cmd+K) */}
-      <CommandPalette />
+      <UpdateBanner />
+      <div className="flex flex-1 overflow-hidden">
+        {/* Command Palette (Cmd+K) */}
+        <CommandPalette />
 
-      {/* Sidebar - Project dropdown + Sessions (280px) */}
-      <Sidebar />
+        {/* Sidebar - Project dropdown + Sessions (280px) */}
+        <Sidebar />
 
-      {/* Multi-pane content area */}
-      <PaneContainer />
+        {/* Multi-pane content area */}
+        <PaneContainer />
+      </div>
+      <UpdateDialog />
     </div>
   );
 };

@@ -58,3 +58,19 @@ export const CONFIG_PIN_SESSION = 'config:pinSession';
 
 /** Unpin a session */
 export const CONFIG_UNPIN_SESSION = 'config:unpinSession';
+
+// =============================================================================
+// Updater API Channels
+// =============================================================================
+
+/** Check for updates */
+export const UPDATER_CHECK = 'updater:check';
+
+/** Download available update */
+export const UPDATER_DOWNLOAD = 'updater:download';
+
+/** Quit and install downloaded update */
+export const UPDATER_INSTALL = 'updater:install';
+
+/** Status event channel (main -> renderer) */
+export const UPDATER_STATUS = 'updater:status';

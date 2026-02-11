@@ -2,6 +2,12 @@ import { WINDOW_ZOOM_FACTOR_CHANGED_CHANNEL } from '@shared/constants';
 import { contextBridge, ipcRenderer } from 'electron';
 
 import {
+  UPDATER_CHECK,
+  UPDATER_DOWNLOAD,
+  UPDATER_INSTALL,
+  UPDATER_STATUS,
+} from './constants/ipcChannels';
+import {
   CONFIG_ADD_IGNORE_REGEX,
   CONFIG_ADD_IGNORE_REPOSITORY,
   CONFIG_ADD_TRIGGER,
@@ -284,6 +290,25 @@ const electronAPI: ElectronAPI = {
     return (): void => {
       ipcRenderer.removeListener('todo-change', listener);
     };
+  },
+
+  // Updater API
+  updater: {
+    check: () => ipcRenderer.invoke(UPDATER_CHECK),
+    download: () => ipcRenderer.invoke(UPDATER_DOWNLOAD),
+    install: () => ipcRenderer.invoke(UPDATER_INSTALL),
+    onStatus: (callback: (event: unknown, status: unknown) => void): (() => void) => {
+      ipcRenderer.on(
+        UPDATER_STATUS,
+        callback as (event: Electron.IpcRendererEvent, ...args: unknown[]) => void
+      );
+      return (): void => {
+        ipcRenderer.removeListener(
+          UPDATER_STATUS,
+          callback as (event: Electron.IpcRendererEvent, ...args: unknown[]) => void
+        );
+      };
+    },
   },
 };
 
