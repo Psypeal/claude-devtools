@@ -68,7 +68,14 @@ export function decodePath(encodedName: string): string {
  * @param encodedName - The encoded directory name
  * @returns The project name
  */
-export function extractProjectName(encodedName: string): string {
+export function extractProjectName(encodedName: string, cwdHint?: string): string {
+  // Prefer cwdHint (actual filesystem path) since decodePath is lossy for
+  // paths containing dashes (e.g., "claude-code-context" → "claude/code/context").
+  if (cwdHint) {
+    const segments = cwdHint.split(/[/\\]/).filter(Boolean);
+    const last = segments[segments.length - 1];
+    if (last) return last;
+  }
   const decoded = decodePath(encodedName);
   const segments = decoded.split('/').filter(Boolean);
   return segments[segments.length - 1] || encodedName;

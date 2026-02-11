@@ -74,6 +74,7 @@ export const NotificationRow = ({
       style={{
         borderColor: 'var(--color-border)',
         backgroundColor: isHovered ? 'var(--color-surface-raised)' : undefined,
+        opacity: isUnread ? 1 : 0.5,
       }}
     >
       {/* Color Dot — always visible, opacity indicates read state */}

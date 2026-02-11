@@ -96,6 +96,19 @@ describe('pathDecoder', () => {
     it('should handle path with underscore in project name', () => {
       expect(extractProjectName('-Users-username-my_cool_projectname')).toBe('my_cool_projectname');
     });
+
+    it('should prefer cwdHint over lossy decode for dashed project names', () => {
+      // Without cwdHint, dashes are decoded as slashes (lossy)
+      expect(extractProjectName('-Users-name-claude-code-context')).toBe('context');
+      // With cwdHint, the actual project name is preserved
+      expect(
+        extractProjectName('-Users-name-claude-code-context', '/Users/name/claude-code-context')
+      ).toBe('claude-code-context');
+    });
+
+    it('should fall back to decoded name when cwdHint is undefined', () => {
+      expect(extractProjectName('-Users-username-projectname', undefined)).toBe('projectname');
+    });
   });
 
   describe('isValidEncodedPath', () => {
