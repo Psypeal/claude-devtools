@@ -17,6 +17,11 @@ import { createLogger } from '@shared/utils/logger';
 import { ipcMain } from 'electron';
 
 import { registerConfigHandlers, removeConfigHandlers } from './config';
+import {
+  initializeContextHandlers,
+  registerContextHandlers,
+  removeContextHandlers,
+} from './context';
 
 const logger = createLogger('IPC:handlers');
 import { registerNotificationHandlers, removeNotificationHandlers } from './notifications';
@@ -45,7 +50,12 @@ import {
 import { registerUtilityHandlers, removeUtilityHandlers } from './utility';
 import { registerValidationHandlers, removeValidationHandlers } from './validation';
 
-import type { ServiceContextRegistry, SshConnectionManager, UpdaterService } from '../services';
+import type {
+  ServiceContext,
+  ServiceContextRegistry,
+  SshConnectionManager,
+  UpdaterService,
+} from '../services';
 
 /**
  * Initializes IPC handlers with service registry.
@@ -53,7 +63,8 @@ import type { ServiceContextRegistry, SshConnectionManager, UpdaterService } fro
 export function initializeIpcHandlers(
   registry: ServiceContextRegistry,
   updater: UpdaterService,
-  sshManager: SshConnectionManager
+  sshManager: SshConnectionManager,
+  onContextSwitched: (context: ServiceContext) => void
 ): void {
   // Initialize domain handlers with registry
   initializeProjectHandlers(registry);
@@ -62,6 +73,7 @@ export function initializeIpcHandlers(
   initializeSubagentHandlers(registry);
   initializeUpdaterHandlers(updater);
   initializeSshHandlers(sshManager, registry);
+  initializeContextHandlers(registry, onContextSwitched);
 
   // Register all handlers
   registerProjectHandlers(ipcMain);
@@ -74,6 +86,7 @@ export function initializeIpcHandlers(
   registerConfigHandlers(ipcMain);
   registerUpdaterHandlers(ipcMain);
   registerSshHandlers(ipcMain);
+  registerContextHandlers(ipcMain);
 
   logger.info('All handlers registered');
 }
@@ -93,6 +106,7 @@ export function removeIpcHandlers(): void {
   removeConfigHandlers(ipcMain);
   removeUpdaterHandlers(ipcMain);
   removeSshHandlers(ipcMain);
+  removeContextHandlers(ipcMain);
 
   logger.info('All handlers removed');
 }

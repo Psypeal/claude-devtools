@@ -105,3 +105,19 @@ export const UPDATER_INSTALL = 'updater:install';
 
 /** Status event channel (main -> renderer) */
 export const UPDATER_STATUS = 'updater:status';
+
+// =============================================================================
+// Context API Channels
+// =============================================================================
+
+/** List all available contexts (local + SSH) */
+export const CONTEXT_LIST = 'context:list';
+
+/** Get active context ID */
+export const CONTEXT_GET_ACTIVE = 'context:getActive';
+
+/** Switch to a different context */
+export const CONTEXT_SWITCH = 'context:switch';
+
+/** Context changed event channel (main -> renderer) */
+export const CONTEXT_CHANGED = 'context:changed';

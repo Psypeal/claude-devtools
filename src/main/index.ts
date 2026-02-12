@@ -154,7 +154,7 @@ function initializeServices(): void {
   updaterService = new UpdaterService();
 
   // Initialize IPC handlers with registry
-  initializeIpcHandlers(contextRegistry, updaterService, sshConnectionManager);
+  initializeIpcHandlers(contextRegistry, updaterService, sshConnectionManager, onContextSwitched);
 
   // Forward SSH state changes to renderer
   sshConnectionManager.on('state-change', (status: unknown) => {
