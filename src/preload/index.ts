@@ -49,6 +49,7 @@ import type {
   ElectronAPI,
   HttpServerStatus,
   NotificationTrigger,
+  SessionsByIdsOptions,
   SessionsPaginationOptions,
   SshConfigHostEntry,
   SshConnectionConfig,
@@ -130,8 +131,11 @@ const electronAPI: ElectronAPI = {
     ipcRenderer.invoke('get-subagent-detail', projectId, sessionId, subagentId),
   getSessionGroups: (projectId: string, sessionId: string) =>
     ipcRenderer.invoke('get-session-groups', projectId, sessionId),
-  getSessionsByIds: (projectId: string, sessionIds: string[]) =>
-    ipcRenderer.invoke('get-sessions-by-ids', projectId, sessionIds),
+  getSessionsByIds: (
+    projectId: string,
+    sessionIds: string[],
+    options?: SessionsByIdsOptions
+  ) => ipcRenderer.invoke('get-sessions-by-ids', projectId, sessionIds, options),
 
   // Repository grouping (worktree support)
   getRepositoryGroups: () => ipcRenderer.invoke('get-repository-groups'),
@@ -344,7 +348,7 @@ const electronAPI: ElectronAPI = {
       return invokeIpcWithResult<SshConnectionStatus>(SSH_DISCONNECT);
     },
     getState: async (): Promise<SshConnectionStatus> => {
-      return ipcRenderer.invoke(SSH_GET_STATE);
+      return invokeIpcWithResult<SshConnectionStatus>(SSH_GET_STATE);
     },
     test: async (config: SshConnectionConfig): Promise<{ success: boolean; error?: string }> => {
       return invokeIpcWithResult<{ success: boolean; error?: string }>(SSH_TEST, config);
@@ -409,7 +413,7 @@ const electronAPI: ElectronAPI = {
       return invokeIpcWithResult<HttpServerStatus>(HTTP_SERVER_STOP);
     },
     getStatus: async (): Promise<HttpServerStatus> => {
-      return ipcRenderer.invoke(HTTP_SERVER_GET_STATUS);
+      return invokeIpcWithResult<HttpServerStatus>(HTTP_SERVER_GET_STATUS);
     },
   },
 };

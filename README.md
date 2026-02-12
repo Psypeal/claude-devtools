@@ -14,7 +14,7 @@
 
 <p align="center">
   <!-- TODO: Replace with actual demo GIF/video -->
-  <img src="docs/assets/demo.gif" alt="claude-devtools Demo" width="900" />
+  <img src="resources/demo.gif" alt="claude-devtools Demo" width="900" />
 </p>
 
 ---

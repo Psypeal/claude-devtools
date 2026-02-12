@@ -15,7 +15,7 @@ import { createLogger } from '@shared/utils/logger';
 import { coercePageLimit, validateProjectId, validateSessionId } from '../ipc/guards';
 import { DataCache } from '../services';
 
-import type { SessionsPaginationOptions } from '../types';
+import type { SessionsByIdsOptions, SessionsPaginationOptions } from '../types';
 import type { HttpServices } from './index';
 import type { FastifyInstance } from 'fastify';
 
@@ -100,6 +100,7 @@ export function registerSessionRoutes(app: FastifyInstance, services: HttpServic
           logger.error('POST sessions-by-ids rejected: sessionIds must be an array');
           return [];
         }
+        const { metadataLevel } = request.body as SessionsByIdsOptions;
 
         // Cap at 50 IDs
         const capped = sessionIds.slice(0, 50);
@@ -117,8 +118,14 @@ export function registerSessionRoutes(app: FastifyInstance, services: HttpServic
           return [];
         }
 
+        const fsType = services.projectScanner.getFileSystemProvider().type;
+        const effectiveMetadataLevel = metadataLevel ?? (fsType === 'ssh' ? 'light' : 'deep');
         const results = await Promise.all(
-          validIds.map((id) => services.projectScanner.getSession(validated.value!, id))
+          validIds.map((id) =>
+            services.projectScanner.getSessionWithOptions(validated.value!, id, {
+              metadataLevel: effectiveMetadataLevel,
+            })
+          )
         );
 
         return results.filter((s): s is NonNullable<typeof s> => s !== null);

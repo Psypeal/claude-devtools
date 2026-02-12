@@ -292,3 +292,16 @@ export interface SessionsPaginationOptions {
    */
   metadataLevel?: SessionMetadataLevel;
 }
+
+/**
+ * Options for targeted session fetches by session ID.
+ */
+export interface SessionsByIdsOptions {
+  /**
+   * Metadata depth to return for each session.
+   * - light: fast preview fields suitable for list/sidebar
+   * - deep: full summary metadata (slower)
+   * @default provider-specific default (SSH=light, local=deep)
+   */
+  metadataLevel?: SessionMetadataLevel;
+}

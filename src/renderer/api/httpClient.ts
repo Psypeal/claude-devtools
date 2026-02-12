@@ -26,6 +26,7 @@ import type {
   SessionAPI,
   SessionDetail,
   SessionMetrics,
+  SessionsByIdsOptions,
   SessionsPaginationOptions,
   SshAPI,
   SshConfigHostEntry,
@@ -106,7 +107,7 @@ export class HttpAPIClient implements ElectronAPI {
       const parsed = JSON.parse(text) as { error?: string };
       throw new Error(parsed.error ?? `HTTP ${res.status}`);
     }
-    return JSON.parse(text, HttpAPIClient.reviveDates) as T;
+    return JSON.parse(text, (key, value) => HttpAPIClient.reviveDates(key, value)) as T;
   }
 
   private async get<T>(path: string): Promise<T> {
@@ -238,9 +239,14 @@ export class HttpAPIClient implements ElectronAPI {
       `/api/projects/${encodeURIComponent(projectId)}/sessions/${encodeURIComponent(sessionId)}/groups`
     );
 
-  getSessionsByIds = (projectId: string, sessionIds: string[]): Promise<Session[]> =>
+  getSessionsByIds = (
+    projectId: string,
+    sessionIds: string[],
+    options?: SessionsByIdsOptions
+  ): Promise<Session[]> =>
     this.post<Session[]>(`/api/projects/${encodeURIComponent(projectId)}/sessions-by-ids`, {
       sessionIds,
+      metadataLevel: options?.metadataLevel,
     });
 
   // ---------------------------------------------------------------------------

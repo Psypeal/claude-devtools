@@ -137,10 +137,10 @@ export const createSessionSlice: StateCreator<AppState, [], [], SessionSlice> = 
         prefilterAll: false,
         metadataLevel: connectionMode === 'ssh' ? 'light' : 'deep',
       });
+      const existingIds = new Set(get().sessions.map((s) => s.id));
+      const newSessions = result.sessions.filter((s) => !existingIds.has(s.id));
       set((prevState) => {
-        // Deduplicate: pinned sessions fetched earlier may appear in paginated results
-        const existingIds = new Set(prevState.sessions.map((s) => s.id));
-        const newSessions = result.sessions.filter((s) => !existingIds.has(s.id));
+        // Deduplicate: pinned sessions fetched earlier may appear in paginated results.
         return {
           sessions: [...prevState.sessions, ...newSessions],
           sessionsCursor: result.nextCursor,
@@ -287,6 +287,7 @@ export const createSessionSlice: StateCreator<AppState, [], [], SessionSlice> = 
     }
 
     try {
+      const { connectionMode } = get();
       const config = await api.config.get();
       const pins = config.sessions?.pinnedSessions?.[projectId] ?? [];
       const pinnedIds = pins.map((p) => p.sessionId);
@@ -298,7 +299,9 @@ export const createSessionSlice: StateCreator<AppState, [], [], SessionSlice> = 
       const missingIds = pinnedIds.filter((id) => !loadedIds.has(id));
 
       if (missingIds.length > 0) {
-        const missingSessions = await api.getSessionsByIds(projectId, missingIds);
+        const missingSessions = await api.getSessionsByIds(projectId, missingIds, {
+          metadataLevel: connectionMode === 'ssh' ? 'light' : 'deep',
+        });
         if (missingSessions.length > 0) {
           // Re-read sessions in case they changed during the async call
           const latestSessions = get().sessions;

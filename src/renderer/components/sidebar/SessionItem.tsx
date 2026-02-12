@@ -144,7 +144,7 @@ export const SessionItem = ({
       <button
         onClick={handleClick}
         onContextMenu={handleContextMenu}
-        className={`h-[48px] w-full border-b px-3 py-2.5 text-left transition-all duration-150 ${isActive ? '' : 'bg-transparent hover:opacity-80'} `}
+        className={`h-[48px] w-full overflow-hidden border-b px-3 py-2 text-left transition-all duration-150 ${isActive ? '' : 'bg-transparent hover:opacity-80'} `}
         style={{
           borderColor: 'var(--color-border)',
           ...(isActive ? { backgroundColor: 'var(--color-surface-raised)' } : {}),
@@ -164,7 +164,7 @@ export const SessionItem = ({
 
         {/* Second line: message count + time */}
         <div
-          className="mt-1 flex items-center gap-2 text-[10px]"
+          className="mt-0.5 flex items-center gap-2 text-[10px] leading-tight"
           style={{ color: 'var(--color-text-muted)' }}
         >
           <span className="flex items-center gap-0.5">

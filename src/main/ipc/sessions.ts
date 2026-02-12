@@ -19,6 +19,7 @@ import {
   type Session,
   type SessionDetail,
   type SessionMetrics,
+  type SessionsByIdsOptions,
   type SessionsPaginationOptions,
 } from '../types';
 
@@ -140,7 +141,8 @@ async function handleGetSessionsPaginated(
 async function handleGetSessionsByIds(
   _event: IpcMainInvokeEvent,
   projectId: string,
-  sessionIds: string[]
+  sessionIds: string[],
+  options?: SessionsByIdsOptions
 ): Promise<Session[]> {
   try {
     const validatedProject = validateProjectId(projectId);
@@ -173,8 +175,12 @@ async function handleGetSessionsByIds(
     }
 
     const { projectScanner } = registry.getActive();
+    const fsType = projectScanner.getFileSystemProvider().type;
+    const metadataLevel = options?.metadataLevel ?? (fsType === 'ssh' ? 'light' : 'deep');
     const results = await Promise.all(
-      validIds.map((id) => projectScanner.getSession(validatedProject.value!, id))
+      validIds.map((id) =>
+        projectScanner.getSessionWithOptions(validatedProject.value!, id, { metadataLevel })
+      )
     );
 
     return results.filter((s): s is Session => s !== null);

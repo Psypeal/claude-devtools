@@ -23,9 +23,14 @@ import {
   type Session,
   type SessionCursor,
   type SessionMetadataLevel,
+  type SessionsByIdsOptions,
   type SessionsPaginationOptions,
 } from '@main/types';
-import { analyzeSessionFileMetadata, extractCwd } from '@main/utils/jsonl';
+import {
+  analyzeSessionFileMetadata,
+  extractCwd,
+  extractFirstUserMessagePreview,
+} from '@main/utils/jsonl';
 import {
   buildSessionPath,
   buildSubagentsPath,
@@ -42,16 +47,16 @@ import * as path from 'path';
 
 import { LocalFileSystemProvider } from '../infrastructure/LocalFileSystemProvider';
 
+import { ProjectPathResolver } from './ProjectPathResolver';
 import { SessionContentFilter } from './SessionContentFilter';
+import { SessionSearcher } from './SessionSearcher';
+import { SubagentLocator } from './SubagentLocator';
 import { subprojectRegistry } from './SubprojectRegistry';
+import { WorktreeGrouper } from './WorktreeGrouper';
 
 import type { FileSystemProvider, FsDirent } from '../infrastructure/FileSystemProvider';
 
 const logger = createLogger('Discovery:ProjectScanner');
-import { ProjectPathResolver } from './ProjectPathResolver';
-import { SessionSearcher } from './SessionSearcher';
-import { SubagentLocator } from './SubagentLocator';
-import { WorktreeGrouper } from './WorktreeGrouper';
 
 export class ProjectScanner {
   private readonly projectsDir: string;
@@ -66,6 +71,10 @@ export class ProjectScanner {
       mtimeMs: number;
       metadata: Awaited<ReturnType<typeof analyzeSessionFileMetadata>>;
     }
+  >();
+  private readonly sessionPreviewCache = new Map<
+    string,
+    { mtimeMs: number; preview: { text: string; timestamp: string } | null }
   >();
 
   // Delegated services
@@ -605,8 +614,10 @@ export class ProjectScanner {
         const needed = limit + 1 - sessions.length;
         const toBuild = withContent.slice(0, needed);
 
-        const builtSessions = await Promise.all(
-          toBuild.map(({ fileInfo }) =>
+        const builtSessions = await this.collectFulfilledInBatches(
+          toBuild,
+          this.fsProvider.type === 'ssh' ? 4 : 16,
+          async ({ fileInfo }) =>
             this.buildSessionForListing(
               metadataLevel,
               projectId,
@@ -615,7 +626,6 @@ export class ProjectScanner {
               decodedPath,
               fileInfo.mtimeMs
             )
-          )
         );
         sessions.push(...builtSessions);
 
@@ -727,6 +737,14 @@ export class ProjectScanner {
       typeof prefetchedMtimeMs === 'number'
         ? { mtimeMs: prefetchedMtimeMs, birthtimeMs: prefetchedMtimeMs }
         : await this.resolveFileTimes(undefined, filePath);
+    const cachedPreview = this.sessionPreviewCache.get(filePath);
+    const preview =
+      cachedPreview?.mtimeMs === times.mtimeMs
+        ? cachedPreview.preview
+        : await this.extractLightPreviewWithRetry(filePath);
+    if (cachedPreview?.mtimeMs !== times.mtimeMs) {
+      this.sessionPreviewCache.set(filePath, { mtimeMs: times.mtimeMs, preview });
+    }
     const metadataLevel: SessionMetadataLevel = 'light';
 
     return {
@@ -734,6 +752,8 @@ export class ProjectScanner {
       projectId,
       projectPath,
       createdAt: Math.floor(times.birthtimeMs),
+      firstMessage: preview?.text,
+      messageTimestamp: preview?.timestamp,
       hasSubagents: false,
       messageCount: 0,
       metadataLevel,
@@ -797,8 +817,29 @@ export class ProjectScanner {
       return null;
     }
 
+    const metadataLevel: SessionMetadataLevel = 'deep';
     const decodedPath = await this.resolveProjectPathForId(projectId);
-    return this.buildSessionMetadata(projectId, sessionId, filePath, decodedPath);
+    return this.buildSessionForListing(metadataLevel, projectId, sessionId, filePath, decodedPath);
+  }
+
+  /**
+   * Gets a single session's metadata with optional depth override.
+   */
+  async getSessionWithOptions(
+    projectId: string,
+    sessionId: string,
+    options?: SessionsByIdsOptions
+  ): Promise<Session | null> {
+    const filePath = this.getSessionPath(projectId, sessionId);
+
+    if (!(await this.fsProvider.exists(filePath))) {
+      return null;
+    }
+
+    const metadataLevel: SessionMetadataLevel =
+      options?.metadataLevel ?? (this.fsProvider.type === 'ssh' ? 'light' : 'deep');
+    const decodedPath = await this.resolveProjectPathForId(projectId);
+    return this.buildSessionForListing(metadataLevel, projectId, sessionId, filePath, decodedPath);
   }
 
   // ===========================================================================
@@ -995,6 +1036,61 @@ export class ProjectScanner {
     }
 
     return results;
+  }
+
+  private async extractLightPreviewWithRetry(
+    filePath: string
+  ): Promise<{ text: string; timestamp: string } | null> {
+    const maxAttempts = this.fsProvider.type === 'ssh' ? 3 : 1;
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await extractFirstUserMessagePreview(filePath, this.fsProvider);
+      } catch (error) {
+        lastError = error;
+        if (attempt < maxAttempts && this.isTransientFsError(error)) {
+          await this.sleep(50 * attempt);
+          continue;
+        }
+        break;
+      }
+    }
+
+    if (lastError) {
+      logger.debug(`Failed to extract light preview for ${filePath}:`, lastError);
+    }
+    return null;
+  }
+
+  private getErrorCode(error: unknown): string {
+    if (typeof error === 'object' && error !== null && 'code' in error) {
+      const code = (error as { code?: unknown }).code;
+      if (typeof code === 'number') {
+        return String(code);
+      }
+      if (typeof code === 'string') {
+        return code;
+      }
+    }
+    return '';
+  }
+
+  private isTransientFsError(error: unknown): boolean {
+    const code = this.getErrorCode(error);
+    return (
+      code === '4' ||
+      code === 'EAGAIN' ||
+      code === 'ECONNRESET' ||
+      code === 'ETIMEDOUT' ||
+      code === 'EPIPE'
+    );
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, ms);
+    });
   }
 
   /**
