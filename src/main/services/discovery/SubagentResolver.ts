@@ -48,9 +48,12 @@ export class SubagentResolver {
       return [];
     }
 
-    // Parse all subagent files
-    const subagents = await Promise.all(
-      subagentFiles.map((filePath) => this.parseSubagentFile(filePath))
+    // Parse subagent files with bounded concurrency to avoid overwhelming SFTP.
+    const parseConcurrency = this.projectScanner.getFileSystemProvider().type === 'ssh' ? 4 : 24;
+    const subagents = await this.collectInBatches(
+      subagentFiles,
+      parseConcurrency,
+      async (filePath) => this.parseSubagentFile(filePath)
     );
 
     // Filter out failed parses
@@ -543,5 +546,26 @@ export class SubagentResolver {
       cacheCreationTokens,
       messageCount,
     };
+  }
+
+  private async collectInBatches<T, R>(
+    items: T[],
+    batchSize: number,
+    mapper: (item: T) => Promise<R>
+  ): Promise<R[]> {
+    const safeBatchSize = Math.max(1, batchSize);
+    const results: R[] = [];
+
+    for (let i = 0; i < items.length; i += safeBatchSize) {
+      const batch = items.slice(i, i + safeBatchSize);
+      const settled = await Promise.allSettled(batch.map((item) => mapper(item)));
+      for (const result of settled) {
+        if (result.status === 'fulfilled') {
+          results.push(result.value);
+        }
+      }
+    }
+
+    return results;
   }
 }

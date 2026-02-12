@@ -186,10 +186,11 @@ export const createSessionDetailSlice: StateCreator<AppState, [], [], SessionDet
 
       // Compute CLAUDE.md stats for the session
       const projectRoot = detail?.session?.projectPath ?? '';
+      const { connectionMode } = get();
       let claudeMdStats: Map<string, ClaudeMdStats> | null = null;
       let contextStats: Map<string, ContextStats> | null = null;
       let phaseInfo: ContextPhaseInfo | null = null;
-      if (conversation?.items) {
+      if (connectionMode !== 'ssh' && conversation?.items) {
         // Fetch real CLAUDE.md token data
         let claudeMdTokenData: Record<string, ClaudeMdFileInfo> = {};
         try {

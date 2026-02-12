@@ -5,9 +5,9 @@
 <h1 align="center">claude-devtools</h1>
 
 <p align="center">
-  <strong>Stop guessing. See exactly what Claude is doing.</strong>
+  <strong><code>Read 3 files</code> told you nothing. This shows you everything.</strong>
   <br />
-  A desktop app that turns Claude Code's opaque session logs into a visual, searchable, actionable interface.
+  A desktop app that reconstructs exactly what Claude Code did — every file path, every tool call, every token — from the raw session logs already on your machine.
 </p>
 
 <br />
@@ -20,6 +20,16 @@
 ---
 
 ## Why This Exists
+
+### Claude Code stopped telling you what it's doing.
+
+Recent Claude Code updates replaced detailed tool output with opaque summaries. `Read 3 files`. `Searched for 1 pattern`. `Edited 2 files`. No paths, no content, no line numbers. The context usage indicator became a three-segment progress bar with no breakdown. To get the details back, the only option is `--verbose` — which dumps raw JSON, internal system prompts, and thousands of lines of noise into your terminal.
+
+**There is no middle ground in the CLI.** You either see too little or too much.
+
+claude-devtools restores the information that was taken away — structured, searchable, and without a single modification to Claude Code itself. It reads the raw session logs from `~/.claude/` and reconstructs the full execution trace: every file path that was read, every regex that was searched, every diff that was applied, every token that was consumed — organized into a visual interface you can actually reason about.
+
+### The wrapper problem.
 
 There are many GUI wrappers for Claude Code — Conductor, Craft Agents, Vibe Kanban, 1Code, ccswitch, and others. I tried them all. None of them solved the actual problem:
 
@@ -39,9 +49,13 @@ There are many GUI wrappers for Claude Code — Conductor, Craft Agents, Vibe Ka
 
 ## Key Features
 
-### :mag: Visible Context Tracking
+### :mag: Visible Context Reconstruction
 
-See exactly what's eating your context window. The **Session Context Panel** breaks down token usage across 6 categories — CLAUDE.md files, @-mentioned files, tool outputs, extended thinking, team coordination, and user messages — so you can instantly identify what's consuming tokens and optimize your workflow.
+Claude Code doesn't expose what's actually in the context window. claude-devtools reverse-engineers it.
+
+The engine walks each turn of the session and reconstructs the full set of context injections — **CLAUDE.md files** (global, project, and directory-level), **@-mentioned files**, **tool call inputs and outputs**, **extended thinking**, **team coordination overhead**, and **user prompt text** — then accumulates them across turns with compaction-phase awareness. When a context reset occurs mid-session, the tracker detects the boundary, measures the token delta, and starts a new phase.
+
+The result is a per-turn breakdown of estimated token attribution across 6 categories, surfaced in three places: a **Context Badge** on each assistant response, a **Token Usage popover** with percentage breakdowns, and a dedicated **Session Context Panel** with phase-filtered drill-down into every injection.
 
 ### :hammer_and_wrench: Rich Tool Call Inspector
 
@@ -63,9 +77,28 @@ When Claude uses multi-agent orchestration, see the full picture. Teammate messa
 
 Hit **Cmd+K** for a Spotlight-style command palette. Search across all sessions in a project — results show context snippets with highlighted keywords. Navigate directly to the exact message.
 
+### :globe_with_meridians: SSH Remote Sessions
+
+Connect to any remote machine over SSH and inspect Claude Code sessions running there — same interface, no compromise.
+
+claude-devtools parses your `~/.ssh/config` for host aliases, supports agent forwarding, private keys, and password auth, then opens an SFTP channel to stream session logs from the remote `~/.claude/` directory. Each SSH host gets its own isolated service context with independent caches, file watchers, and parsers. Switching between local and remote workspaces is instant — the app snapshots your current state to IndexedDB before the switch and restores it when you return, tabs and all.
+
 ### :bar_chart: Multi-Pane Layout
 
 Open multiple sessions side-by-side. Drag-and-drop tabs between panes, split views, and compare sessions in parallel — like a proper IDE for your AI conversations.
+
+---
+
+## What the CLI Hides vs. What claude-devtools Shows
+
+| What you see in the terminal | What claude-devtools shows you |
+|------------------------------|-------------------------------|
+| `Read 3 files` | Exact file paths, syntax-highlighted content with line numbers |
+| `Searched for 1 pattern` | The regex pattern, every matching file, and the matched lines |
+| `Edited 2 files` | Inline diffs with added/removed highlighting per file |
+| A three-segment context bar | Per-turn token attribution across 6 categories with compaction-phase tracking |
+| Subagent output interleaved with the main thread | Isolated execution trees per agent, expandable inline with their own metrics |
+| `--verbose` JSON dump | Structured, filterable, navigable interface — no noise |
 
 ---
 

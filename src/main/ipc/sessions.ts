@@ -224,8 +224,11 @@ async function handleGetSessionDetail(
       return sessionDetail;
     }
 
-    // Get session metadata
-    const session = await projectScanner.getSession(safeProjectId, safeSessionId);
+    const fsType = projectScanner.getFileSystemProvider().type;
+    // In SSH mode, avoid an extra deep metadata scan before full parse.
+    const session = await projectScanner.getSessionWithOptions(safeProjectId, safeSessionId, {
+      metadataLevel: fsType === 'ssh' ? 'light' : 'deep',
+    });
     if (!session) {
       logger.error(`Session not found: ${sessionId}`);
       return null;
@@ -241,6 +244,7 @@ async function handleGetSessionDetail(
       parsedSession.taskCalls,
       parsedSession.messages
     );
+    session.hasSubagents = subagents.length > 0;
 
     // Build session detail with chunks
     sessionDetail = chunkBuilder.buildSessionDetail(session, parsedSession.messages, subagents);

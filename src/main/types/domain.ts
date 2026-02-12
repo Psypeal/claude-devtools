@@ -237,6 +237,8 @@ export interface SearchSessionsResult {
   sessionsSearched: number;
   /** Search query used */
   query: string;
+  /** True when fast mode intentionally returns only a recent subset */
+  isPartial?: boolean;
 }
 
 // =============================================================================

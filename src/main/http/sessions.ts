@@ -160,8 +160,15 @@ export function registerSessionRoutes(app: FastifyInstance, services: HttpServic
           return sessionDetail;
         }
 
-        // Get session metadata
-        const session = await services.projectScanner.getSession(safeProjectId, safeSessionId);
+        const fsType = services.projectScanner.getFileSystemProvider().type;
+        // In SSH mode, avoid an extra deep metadata scan before full parse.
+        const session = await services.projectScanner.getSessionWithOptions(
+          safeProjectId,
+          safeSessionId,
+          {
+            metadataLevel: fsType === 'ssh' ? 'light' : 'deep',
+          }
+        );
         if (!session) {
           logger.error(`Session not found: ${safeSessionId}`);
           return null;
@@ -180,6 +187,7 @@ export function registerSessionRoutes(app: FastifyInstance, services: HttpServic
           parsedSession.taskCalls,
           parsedSession.messages
         );
+        session.hasSubagents = subagents.length > 0;
 
         // Build session detail with chunks
         sessionDetail = services.chunkBuilder.buildSessionDetail(

@@ -160,6 +160,7 @@ export const CommandPalette = (): React.JSX.Element | null => {
   const [loading, setLoading] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [totalMatches, setTotalMatches] = useState(0);
+  const [searchIsPartial, setSearchIsPartial] = useState(false);
   const latestSearchRequestRef = useRef(0);
 
   // Determine search mode based on whether a project is selected
@@ -200,6 +201,7 @@ export const CommandPalette = (): React.JSX.Element | null => {
       setSessionResults([]);
       setSelectedIndex(0);
       setTotalMatches(0);
+      setSearchIsPartial(false);
     }
   }, [commandPaletteOpen]);
 
@@ -213,6 +215,7 @@ export const CommandPalette = (): React.JSX.Element | null => {
     ) {
       setSessionResults([]);
       setTotalMatches(0);
+      setSearchIsPartial(false);
       return;
     }
 
@@ -227,6 +230,7 @@ export const CommandPalette = (): React.JSX.Element | null => {
         }
         setSessionResults(searchResult.results);
         setTotalMatches(searchResult.totalMatches);
+        setSearchIsPartial(!!searchResult.isPartial);
         setSelectedIndex(0);
       } catch (error) {
         if (latestSearchRequestRef.current !== requestId) {
@@ -235,6 +239,7 @@ export const CommandPalette = (): React.JSX.Element | null => {
         logger.error('Search error:', error);
         setSessionResults([]);
         setTotalMatches(0);
+        setSearchIsPartial(false);
       } finally {
         if (latestSearchRequestRef.current === requestId) {
           setLoading(false);
@@ -448,7 +453,9 @@ export const CommandPalette = (): React.JSX.Element | null => {
             </div>
           ) : sessionResults.length === 0 && !loading ? (
             <div className="px-4 py-8 text-center text-sm text-text-muted">
-              No results found for &quot;{query}&quot;
+              {searchIsPartial
+                ? `No fast results in recent sessions for "${query}"`
+                : `No results found for "${query}"`}
             </div>
           ) : (
             <div className="py-2">
@@ -471,7 +478,7 @@ export const CommandPalette = (): React.JSX.Element | null => {
             {searchMode === 'projects'
               ? `${filteredProjects.length} project${filteredProjects.length !== 1 ? 's' : ''}`
               : totalMatches > 0
-                ? `${totalMatches} result${totalMatches !== 1 ? 's' : ''}`
+                ? `${totalMatches} ${searchIsPartial ? 'fast ' : ''}result${totalMatches !== 1 ? 's' : ''}`
                 : 'Type to search'}
           </span>
           <div className="flex items-center gap-4">
