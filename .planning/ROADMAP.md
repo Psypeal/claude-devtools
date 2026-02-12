@@ -13,8 +13,8 @@ This roadmap transforms claude-devtools from a single-mode application (local XO
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Provider Plumbing** - Fix SSH session parsing and subagent loading ✓ 2026-02-12
-- [ ] **Phase 2: Service Infrastructure** - ServiceContextRegistry and IPC context API
-- [ ] **Phase 3: State Management** - Snapshot/restore system for instant switching
+- [x] **Phase 2: Service Infrastructure** - ServiceContextRegistry and IPC context API ✓ 2026-02-12
+- [x] **Phase 3: State Management** - Snapshot/restore system for instant switching ✓ 2026-02-12
 - [ ] **Phase 4: Workspace UI** - Context switcher and connection profiles
 
 ## Phase Details
@@ -45,9 +45,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — ServiceContext bundle class, ServiceContextRegistry coordinator, and dispose() methods for FileWatcher/DataCache
-- [ ] 02-02-PLAN.md — Wire registry into main/index.ts and update all IPC handlers to route via registry
-- [ ] 02-03-PLAN.md — Context management IPC channels, preload bridge, and connection profiles in ConfigManager
+- [x] 02-01-PLAN.md — ServiceContext bundle class, ServiceContextRegistry coordinator, and dispose() methods for FileWatcher/DataCache ✓
+- [x] 02-02-PLAN.md — Wire registry into main/index.ts and update all IPC handlers to route via registry ✓
+- [x] 02-03-PLAN.md — Context management IPC channels, preload bridge, and connection profiles in ConfigManager ✓
 
 ### Phase 3: State Management
 **Goal**: Context switching preserves exact UI state per workspace with instant restoration
@@ -59,11 +59,10 @@ Plans:
   3. Previously visited context restores instantly without refetching data
   4. Loading overlay prevents stale data flash during context switch
   5. Context snapshots survive app restart (stored in IndexedDB)
-**Plans**: 1-2 plans
+**Plans**: 1 plan
 
 Plans:
-- [ ] 03-01: Context snapshot system and contextSlice
-- [ ] 03-02: IndexedDB persistence with expiration handling
+- [x] 03-01-PLAN.md — Context snapshot system: contextSlice, IndexedDB storage, overlay, validation, and store wiring ✓
 
 ### Phase 4: Workspace UI
 **Goal**: Users can visually manage and switch between workspaces with clear status indicators
@@ -75,11 +74,11 @@ Plans:
   3. Connection status indicators clearly show connected/connecting/disconnected/error states with distinct visual treatment
   4. User can save SSH connection as a profile, then reconnect to it later without re-entering credentials
   5. User can switch workspaces using keyboard shortcut (Cmd/Ctrl+K or similar)
-**Plans**: 1-2 plans
+**Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: ContextSwitcher component and status indicators
-- [ ] 04-02: Connection profiles UI in settings
+- [ ] 04-01-PLAN.md — ContextSwitcher dropdown, ConnectionStatusBadge, SidebarHeader integration, and Cmd+Shift+K shortcut
+- [ ] 04-02-PLAN.md — WorkspaceSection settings for SSH profile CRUD with auto-refresh
 
 ## Progress
 
@@ -89,10 +88,10 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Provider Plumbing | 1/1 | ✓ Complete | 2026-02-12 |
-| 2. Service Infrastructure | 0/3 | Not started | - |
-| 3. State Management | 0/1-2 | Not started | - |
-| 4. Workspace UI | 0/1-2 | Not started | - |
+| 2. Service Infrastructure | 3/3 | ✓ Complete | 2026-02-12 |
+| 3. State Management | 1/1 | ✓ Complete | 2026-02-12 |
+| 4. Workspace UI | 0/2 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-12*
-*Last updated: 2026-02-12 after Phase 2 planning complete*
+*Last updated: 2026-02-12 after Phase 4 planning complete*
