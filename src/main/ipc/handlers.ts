@@ -45,38 +45,23 @@ import {
 import { registerUtilityHandlers, removeUtilityHandlers } from './utility';
 import { registerValidationHandlers, removeValidationHandlers } from './validation';
 
-import type {
-  ChunkBuilder,
-  DataCache,
-  ProjectScanner,
-  SessionParser,
-  SshConnectionManager,
-  SubagentResolver,
-  UpdaterService,
-} from '../services';
+import type { ServiceContextRegistry, SshConnectionManager, UpdaterService } from '../services';
 
 /**
- * Initializes IPC handlers with service instances.
+ * Initializes IPC handlers with service registry.
  */
 export function initializeIpcHandlers(
-  scanner: ProjectScanner,
-  parser: SessionParser,
-  resolver: SubagentResolver,
-  builder: ChunkBuilder,
-  cache: DataCache,
+  registry: ServiceContextRegistry,
   updater: UpdaterService,
-  sshManager?: SshConnectionManager,
-  sshModeSwitchCallback?: (mode: 'local' | 'ssh') => Promise<void>
+  sshManager: SshConnectionManager
 ): void {
-  // Initialize domain handlers with their required services
-  initializeProjectHandlers(scanner);
-  initializeSessionHandlers(scanner, parser, resolver, builder, cache);
-  initializeSearchHandlers(scanner);
-  initializeSubagentHandlers(builder, cache, parser, resolver, scanner);
+  // Initialize domain handlers with registry
+  initializeProjectHandlers(registry);
+  initializeSessionHandlers(registry);
+  initializeSearchHandlers(registry);
+  initializeSubagentHandlers(registry);
   initializeUpdaterHandlers(updater);
-  if (sshManager && sshModeSwitchCallback) {
-    initializeSshHandlers(sshManager, sshModeSwitchCallback);
-  }
+  initializeSshHandlers(sshManager, registry);
 
   // Register all handlers
   registerProjectHandlers(ipcMain);
@@ -88,30 +73,9 @@ export function initializeIpcHandlers(
   registerNotificationHandlers(ipcMain);
   registerConfigHandlers(ipcMain);
   registerUpdaterHandlers(ipcMain);
-  if (sshManager) {
-    registerSshHandlers(ipcMain);
-  }
+  registerSshHandlers(ipcMain);
 
   logger.info('All handlers registered');
-}
-
-/**
- * Re-initializes service-dependent IPC handlers after a mode switch (local ↔ SSH).
- * This updates the module-level service references held by each domain handler module,
- * ensuring IPC calls after the switch use the new service instances.
- */
-export function reinitializeServiceHandlers(
-  scanner: ProjectScanner,
-  parser: SessionParser,
-  resolver: SubagentResolver,
-  builder: ChunkBuilder,
-  cache: DataCache
-): void {
-  initializeProjectHandlers(scanner);
-  initializeSessionHandlers(scanner, parser, resolver, builder, cache);
-  initializeSearchHandlers(scanner);
-  initializeSubagentHandlers(builder, cache, parser, resolver, scanner);
-  logger.info('Service handlers re-initialized after mode switch');
 }
 
 /**

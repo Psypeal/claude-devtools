@@ -4,30 +4,23 @@
  * Responsibilities:
  * - Initialize Electron app and main window
  * - Set up IPC handlers for data access
- * - Initialize services (ProjectScanner, SessionParser, etc.)
+ * - Initialize ServiceContextRegistry with local context
  * - Start file watcher for live updates
  * - Manage application lifecycle
  */
 
 import {
-  CACHE_CLEANUP_INTERVAL_MINUTES,
-  CACHE_TTL_MINUTES,
   DEFAULT_WINDOW_HEIGHT,
   DEFAULT_WINDOW_WIDTH,
   DEV_SERVER_PORT,
   getTrafficLightPositionForZoom,
-  MAX_CACHE_SESSIONS,
   WINDOW_ZOOM_FACTOR_CHANGED_CHANNEL,
 } from '@shared/constants';
 import { createLogger } from '@shared/utils/logger';
 import { app, BrowserWindow } from 'electron';
 import { join } from 'path';
 
-import {
-  initializeIpcHandlers,
-  reinitializeServiceHandlers,
-  removeIpcHandlers,
-} from './ipc/handlers';
+import { initializeIpcHandlers, removeIpcHandlers } from './ipc/handlers';
 
 // Icon path - works for both dev and production
 const getIconPath = (): string => {
@@ -42,15 +35,12 @@ const logger = createLogger('App');
 import { SSH_STATUS } from '@preload/constants/ipcChannels';
 
 import {
-  ChunkBuilder,
   configManager,
-  DataCache,
-  FileWatcher,
+  LocalFileSystemProvider,
   NotificationManager,
-  ProjectScanner,
-  SessionParser,
+  ServiceContext,
+  ServiceContextRegistry,
   SshConnectionManager,
-  SubagentResolver,
   UpdaterService,
 } from './services';
 
@@ -60,17 +50,71 @@ import {
 
 let mainWindow: BrowserWindow | null = null;
 
-// Service instances
-let projectScanner: ProjectScanner;
-let sessionParser: SessionParser;
-let subagentResolver: SubagentResolver;
-let chunkBuilder: ChunkBuilder;
-let dataCache: DataCache;
-let fileWatcher: FileWatcher;
+// Service registry and global services
+let contextRegistry: ServiceContextRegistry;
 let notificationManager: NotificationManager;
 let updaterService: UpdaterService;
 let sshConnectionManager: SshConnectionManager;
-let cleanupInterval: NodeJS.Timeout | null = null;
+
+// File watcher event cleanup functions
+let fileChangeCleanup: (() => void) | null = null;
+let todoChangeCleanup: (() => void) | null = null;
+
+/**
+ * Wires file watcher events from a ServiceContext to the renderer.
+ * Cleans up previous listeners before adding new ones.
+ */
+function wireFileWatcherEvents(context: ServiceContext): void {
+  logger.info(`Wiring FileWatcher events for context: ${context.id}`);
+
+  // Clean up previous listeners
+  if (fileChangeCleanup) {
+    fileChangeCleanup();
+    fileChangeCleanup = null;
+  }
+  if (todoChangeCleanup) {
+    todoChangeCleanup();
+    todoChangeCleanup = null;
+  }
+
+  // Wire file-change events
+  const fileChangeHandler = (event: unknown) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('file-change', event);
+    }
+  };
+  context.fileWatcher.on('file-change', fileChangeHandler);
+  fileChangeCleanup = () => context.fileWatcher.off('file-change', fileChangeHandler);
+
+  // Wire todo-change events
+  const todoChangeHandler = (event: unknown) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('todo-change', event);
+    }
+  };
+  context.fileWatcher.on('todo-change', todoChangeHandler);
+  todoChangeCleanup = () => context.fileWatcher.off('todo-change', todoChangeHandler);
+
+  logger.info(`FileWatcher events wired for context: ${context.id}`);
+}
+
+/**
+ * Callback invoked when context switches (called by SSH IPC handler).
+ * Re-wires file watcher events and notifies renderer.
+ */
+export function onContextSwitched(context: ServiceContext): void {
+  // Re-wire file watcher events to new context
+  wireFileWatcherEvents(context);
+
+  // Notify renderer of context change
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(SSH_STATUS, sshConnectionManager.getStatus());
+    mainWindow.webContents.send('context-changed', {
+      contextId: context.id,
+      type: context.type,
+    });
+  }
+}
 
 /**
  * Initializes all services.
@@ -81,71 +125,36 @@ function initializeServices(): void {
   // Initialize SSH connection manager
   sshConnectionManager = new SshConnectionManager();
 
-  // Initialize services (paths are set automatically from environment)
-  projectScanner = new ProjectScanner();
-  sessionParser = new SessionParser(projectScanner);
-  subagentResolver = new SubagentResolver(projectScanner);
-  chunkBuilder = new ChunkBuilder();
-  const disableCache = process.env.CLAUDE_CONTEXT_DISABLE_CACHE === '1';
-  dataCache = new DataCache(MAX_CACHE_SESSIONS, CACHE_TTL_MINUTES, !disableCache);
+  // Create ServiceContextRegistry
+  contextRegistry = new ServiceContextRegistry();
+
+  // Create local context
+  const localContext = new ServiceContext({
+    id: 'local',
+    type: 'local',
+    fsProvider: new LocalFileSystemProvider(),
+  });
+
+  // Register and start local context
+  contextRegistry.registerContext(localContext);
+  localContext.start();
+
+  logger.info(`Projects directory: ${localContext.projectScanner.getProjectsDir()}`);
+
+  // Initialize notification manager (singleton, not context-scoped)
+  notificationManager = NotificationManager.getInstance();
+
+  // Set notification manager on local context's file watcher
+  localContext.fileWatcher.setNotificationManager(notificationManager);
+
+  // Wire file watcher events for local context
+  wireFileWatcherEvents(localContext);
+
+  // Initialize updater service
   updaterService = new UpdaterService();
 
-  logger.info(`Projects directory: ${projectScanner.getProjectsDir()}`);
-
-  // Mode switch callback: recreates services with new provider when switching local↔SSH
-  const handleModeSwitch = async (mode: 'local' | 'ssh'): Promise<void> => {
-    logger.info(`Switching to ${mode} mode`);
-
-    // Stop file watcher
-    fileWatcher.stop();
-
-    // Clear data cache
-    dataCache.clear();
-
-    // Get provider and projects path from connection manager
-    const provider = sshConnectionManager.getProvider();
-    const projectsDir =
-      mode === 'ssh' ? (sshConnectionManager.getRemoteProjectsPath() ?? undefined) : undefined;
-
-    // Recreate services with new provider
-    projectScanner = new ProjectScanner(projectsDir, undefined, provider);
-    sessionParser = new SessionParser(projectScanner);
-    subagentResolver = new SubagentResolver(projectScanner);
-
-    // Re-initialize IPC handler service references so subsequent calls use new instances
-    reinitializeServiceHandlers(
-      projectScanner,
-      sessionParser,
-      subagentResolver,
-      chunkBuilder,
-      dataCache
-    );
-
-    // Update file watcher provider
-    fileWatcher.setFileSystemProvider(provider);
-
-    // Restart file watcher
-    fileWatcher.start();
-
-    // Notify renderer to re-fetch all data
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send(SSH_STATUS, sshConnectionManager.getStatus());
-    }
-
-    logger.info(`Mode switch to ${mode} complete`);
-  };
-
-  // Initialize IPC handlers (including SSH)
-  initializeIpcHandlers(
-    projectScanner,
-    sessionParser,
-    subagentResolver,
-    chunkBuilder,
-    dataCache,
-    updaterService,
-    sshConnectionManager,
-    handleModeSwitch
-  );
+  // Initialize IPC handlers with registry
+  initializeIpcHandlers(contextRegistry, updaterService, sshConnectionManager);
 
   // Forward SSH state changes to renderer
   sshConnectionManager.on('state-change', (status: unknown) => {
@@ -153,33 +162,6 @@ function initializeServices(): void {
       mainWindow.webContents.send(SSH_STATUS, status);
     }
   });
-
-  // Initialize notification manager using singleton pattern
-  // This ensures IPC handlers and FileWatcher use the same instance
-  // Note: mainWindow will be set later via setMainWindow() when window is created
-  notificationManager = NotificationManager.getInstance();
-
-  // Start file watcher with notification manager for error detection
-  fileWatcher = new FileWatcher(dataCache);
-  fileWatcher.setNotificationManager(notificationManager);
-  fileWatcher.start();
-
-  // Forward file change events to renderer
-  // Note: Error detection is handled internally by FileWatcher via NotificationManager
-  fileWatcher.on('file-change', (event) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('file-change', event);
-    }
-  });
-
-  fileWatcher.on('todo-change', (event) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('todo-change', event);
-    }
-  });
-
-  // Start automatic cache cleanup
-  cleanupInterval = dataCache.startAutoCleanup(CACHE_CLEANUP_INTERVAL_MINUTES);
 
   logger.info('Services initialized successfully');
 }
@@ -190,15 +172,19 @@ function initializeServices(): void {
 function shutdownServices(): void {
   logger.info('Shutting down services...');
 
-  // Stop file watcher
-  if (fileWatcher) {
-    fileWatcher.stop();
+  // Clean up file watcher event listeners
+  if (fileChangeCleanup) {
+    fileChangeCleanup();
+    fileChangeCleanup = null;
+  }
+  if (todoChangeCleanup) {
+    todoChangeCleanup();
+    todoChangeCleanup = null;
   }
 
-  // Stop cache cleanup
-  if (cleanupInterval) {
-    clearInterval(cleanupInterval);
-    cleanupInterval = null;
+  // Dispose all contexts (including local)
+  if (contextRegistry) {
+    contextRegistry.dispose();
   }
 
   // Dispose SSH connection manager
