@@ -38,6 +38,10 @@ export function useKeyboardShortcuts(): void {
     focusPane,
     splitPane,
     closePane,
+    availableContexts,
+    activeContextId,
+    switchContext,
+    isContextSwitching,
   } = useStore(
     useShallow((s) => ({
       openTabs: s.openTabs,
@@ -61,6 +65,10 @@ export function useKeyboardShortcuts(): void {
       focusPane: s.focusPane,
       splitPane: s.splitPane,
       closePane: s.closePane,
+      availableContexts: s.availableContexts,
+      activeContextId: s.activeContextId,
+      switchContext: s.switchContext,
+      isContextSwitching: s.isContextSwitching,
     }))
   );
 
@@ -205,6 +213,17 @@ export function useKeyboardShortcuts(): void {
         return;
       }
 
+      // Cmd+Shift+K: Cycle to next workspace context
+      if (event.key === 'k' && event.shiftKey) {
+        event.preventDefault();
+        if (!isContextSwitching && availableContexts.length > 1) {
+          const currentIndex = availableContexts.findIndex((c) => c.id === activeContextId);
+          const nextIndex = (currentIndex + 1) % availableContexts.length;
+          void switchContext(availableContexts[nextIndex].id);
+        }
+        return;
+      }
+
       // Cmd+K: Open command palette for global search
       if (event.key === 'k') {
         event.preventDefault();
@@ -280,5 +299,9 @@ export function useKeyboardShortcuts(): void {
     focusPane,
     splitPane,
     closePane,
+    availableContexts,
+    activeContextId,
+    switchContext,
+    isContextSwitching,
   ]);
 }

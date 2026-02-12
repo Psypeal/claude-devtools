@@ -19,6 +19,7 @@ import { truncateMiddle } from '@renderer/utils/stringUtils';
 import { Check, ChevronDown, GitBranch, PanelLeft } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
+import { ContextSwitcher } from '../common/ContextSwitcher';
 import { WorktreeBadge } from '../common/WorktreeBadge';
 
 import type { Worktree, WorktreeSource } from '@renderer/types/data';
@@ -325,7 +326,7 @@ export const SidebarHeader = (): React.JSX.Element => {
       {/* ROW 1: Project Identity (Title Bar / Drag Region) */}
       <div
         ref={projectDropdownRef}
-        className="relative flex select-none items-center justify-between pr-2"
+        className="relative flex select-none items-center gap-2 pr-2"
         style={
           {
             height: `${HEADER_ROW1_HEIGHT}px`,
@@ -334,6 +335,16 @@ export const SidebarHeader = (): React.JSX.Element => {
           } as React.CSSProperties
         }
       >
+        {/* Context Switcher - workspace indicator */}
+        <ContextSwitcher />
+
+        {/* Visual separator */}
+        <div
+          className="h-4 w-px"
+          style={{ backgroundColor: 'var(--color-border)' }}
+        />
+
+        {/* Project name dropdown button */}
         <button
           onClick={() => setIsProjectDropdownOpen(!isProjectDropdownOpen)}
           className="flex min-w-0 items-center gap-2 transition-opacity hover:opacity-80"
@@ -356,7 +367,7 @@ export const SidebarHeader = (): React.JSX.Element => {
           onClick={toggleSidebar}
           onMouseEnter={() => setIsCollapseHovered(true)}
           onMouseLeave={() => setIsCollapseHovered(false)}
-          className="shrink-0 rounded-md p-1.5 transition-colors"
+          className="ml-auto shrink-0 rounded-md p-1.5 transition-colors"
           style={
             {
               WebkitAppRegion: 'no-drag',

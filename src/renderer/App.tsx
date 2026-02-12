@@ -24,6 +24,15 @@ export const App = (): React.JSX.Element => {
     void useStore.getState().initializeContextSystem();
   }, []);
 
+  // Refresh available contexts when SSH connection state changes
+  useEffect(() => {
+    if (!window.electronAPI.ssh?.onStatus) return;
+    const cleanup = window.electronAPI.ssh.onStatus(() => {
+      void useStore.getState().fetchAvailableContexts();
+    });
+    return cleanup;
+  }, []);
+
   // Initialize IPC event listeners (notifications, file changes)
   useEffect(() => {
     const cleanup = initializeNotificationListeners();
