@@ -26,7 +26,7 @@ import { type DataCache } from './DataCache';
 import { LocalFileSystemProvider } from './LocalFileSystemProvider';
 import { type NotificationManager } from './NotificationManager';
 
-import type { FileSystemProvider } from './FileSystemProvider';
+import type { FileSystemProvider, FsDirent } from './FileSystemProvider';
 
 const logger = createLogger('Service:FileWatcher');
 
@@ -73,7 +73,9 @@ export class FileWatcher extends EventEmitter {
   /** Timer for SSH polling mode (replaces fs.watch) */
   private pollingTimer: NodeJS.Timeout | null = null;
   /** Polling interval for SSH mode */
-  private static readonly SSH_POLL_INTERVAL_MS = 5000;
+  private static readonly SSH_POLL_INTERVAL_MS = 10000;
+  /** Guard to prevent overlapping SSH polling runs */
+  private pollingInProgress = false;
   /** Track file sizes for SSH polling change detection */
   private polledFileSizes = new Map<string, number>();
   /** Files currently being processed (concurrency guard) */
@@ -176,6 +178,7 @@ export class FileWatcher extends EventEmitter {
       clearInterval(this.pollingTimer);
       this.pollingTimer = null;
     }
+    this.pollingInProgress = false;
     this.polledFileSizes.clear();
 
     // Clear error detection tracking
@@ -372,9 +375,18 @@ export class FileWatcher extends EventEmitter {
 
     logger.info('FileWatcher: Starting SSH polling mode');
     this.pollingTimer = setInterval(() => {
-      this.pollForChanges().catch((err) => {
-        logger.error('Error during SSH polling:', err);
-      });
+      if (this.pollingInProgress) {
+        return;
+      }
+
+      this.pollingInProgress = true;
+      this.pollForChanges()
+        .catch((err) => {
+          logger.error('Error during SSH polling:', err);
+        })
+        .finally(() => {
+          this.pollingInProgress = false;
+        });
     }, FileWatcher.SSH_POLL_INTERVAL_MS);
   }
 
@@ -383,14 +395,12 @@ export class FileWatcher extends EventEmitter {
    */
   private async pollForChanges(): Promise<void> {
     try {
-      if (!(await this.fsProvider.exists(this.projectsPath))) return;
-
       const projectDirs = await this.fsProvider.readdir(this.projectsPath);
       for (const dir of projectDirs) {
         if (!dir.isDirectory()) continue;
 
         const projectPath = path.join(this.projectsPath, dir.name);
-        let entries: import('./FileSystemProvider').FsDirent[];
+        let entries: FsDirent[];
         try {
           entries = await this.fsProvider.readdir(projectPath);
         } catch {

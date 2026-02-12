@@ -201,25 +201,37 @@ export class ProjectScanner {
         cwd: string | null;
       }
 
-      const sessionInfos: SessionInfo[] = await Promise.all(
-        sessionFiles.map(async (file) => {
+      const shouldSplitByCwd = this.fsProvider.type !== 'ssh';
+      const sessionInfos = await this.collectFulfilledInBatches(
+        sessionFiles,
+        this.fsProvider.type === 'ssh' ? 32 : 128,
+        async (file) => {
           const filePath = path.join(projectPath, file.name);
           const stats = await this.fsProvider.stat(filePath);
           let cwd: string | null = null;
-          try {
-            cwd = await extractCwd(filePath, this.fsProvider);
-          } catch {
-            // Ignore unreadable files
+
+          // Over SSH, avoid reading every file body during project discovery.
+          if (shouldSplitByCwd) {
+            try {
+              cwd = await extractCwd(filePath, this.fsProvider);
+            } catch {
+              // Ignore unreadable files
+            }
           }
+
           return {
             sessionId: extractSessionId(file.name),
             filePath,
             mtimeMs: stats.mtimeMs,
             birthtimeMs: stats.birthtimeMs,
             cwd,
-          };
-        })
+          } satisfies SessionInfo;
+        }
       );
+
+      if (sessionInfos.length === 0) {
+        return [];
+      }
 
       // Group sessions by cwd
       const cwdGroups = new Map<string, SessionInfo[]>();
@@ -227,7 +239,7 @@ export class ProjectScanner {
       const decodedFallback = baseName; // Used when cwd is null
 
       for (const info of sessionInfos) {
-        const key = info.cwd ?? `__decoded__${decodedFallback}`;
+        const key = shouldSplitByCwd ? (info.cwd ?? `__decoded__${decodedFallback}`) : encodedName;
         const group = cwdGroups.get(key) ?? [];
         group.push(info);
         cwdGroups.set(key, group);
@@ -360,6 +372,7 @@ export class ProjectScanner {
       const baseDir = extractBaseDir(projectId);
       const projectPath = path.join(this.projectsDir, baseDir);
       const sessionFilter = subprojectRegistry.getSessionFilter(projectId);
+      const shouldFilterNoise = this.fsProvider.type !== 'ssh';
 
       if (!(await this.fsProvider.exists(projectPath))) {
         return [];
@@ -381,10 +394,12 @@ export class ProjectScanner {
           const sessionId = extractSessionId(file.name);
           const filePath = path.join(projectPath, file.name);
 
-          // Check if session has non-noise messages (delegated to SessionContentFilter)
-          const hasContent = await this.hasDisplayableContent(filePath);
-          if (!hasContent) {
-            return null; // Filter out noise-only sessions
+          if (shouldFilterNoise) {
+            // Check if session has non-noise messages (delegated to SessionContentFilter)
+            const hasContent = await this.hasDisplayableContent(filePath);
+            if (!hasContent) {
+              return null; // Filter out noise-only sessions
+            }
           }
 
           return this.buildSessionMetadata(projectId, sessionId, filePath, decodedPath);
@@ -425,6 +440,7 @@ export class ProjectScanner {
       const baseDir = extractBaseDir(projectId);
       const projectPath = path.join(this.projectsDir, baseDir);
       const sessionFilter = subprojectRegistry.getSessionFilter(projectId);
+      const shouldFilterNoise = this.fsProvider.type !== 'ssh';
 
       if (!(await this.fsProvider.exists(projectPath))) {
         return { sessions: [], nextCursor: null, hasMore: false, totalCount: 0 };
@@ -439,7 +455,7 @@ export class ProjectScanner {
         sessionFiles = sessionFiles.filter((f) => sessionFilter.has(extractSessionId(f.name)));
       }
 
-      // Get stats for all session files
+      // Get stats for all session files (parallel for SSH performance)
       interface SessionFileInfo {
         name: string;
         sessionId: string;
@@ -447,24 +463,22 @@ export class ProjectScanner {
         filePath: string;
         mtimeMs: number;
       }
-      const fileInfos: SessionFileInfo[] = [];
 
-      for (const file of sessionFiles) {
-        const filePath = path.join(projectPath, file.name);
-        try {
+      const fileInfos = await this.collectFulfilledInBatches(
+        sessionFiles,
+        this.fsProvider.type === 'ssh' ? 48 : 200,
+        async (file) => {
+          const filePath = path.join(projectPath, file.name);
           const stats = await this.fsProvider.stat(filePath);
-          fileInfos.push({
+          return {
             name: file.name,
             sessionId: extractSessionId(file.name),
             timestamp: stats.mtimeMs,
             filePath,
             mtimeMs: stats.mtimeMs,
-          });
-        } catch {
-          // Skip files we can't stat
-          continue;
+          } satisfies SessionFileInfo;
         }
-      }
+      );
 
       // Step 2: Sort by timestamp descending (most recent first)
       fileInfos.sort((a, b) => {
@@ -479,11 +493,17 @@ export class ProjectScanner {
       // This is slower but provides exact totalCount.
       let validSessionIds: Set<string> | null = null;
       let totalCount = 0;
-      if (prefilterAll) {
+      if (prefilterAll && shouldFilterNoise) {
+        const contentResults = await Promise.allSettled(
+          fileInfos.map(async (fileInfo) => ({
+            sessionId: fileInfo.sessionId,
+            hasContent: await this.hasDisplayableContent(fileInfo.filePath, fileInfo.mtimeMs),
+          }))
+        );
         validSessionIds = new Set<string>();
-        for (const fileInfo of fileInfos) {
-          if (await this.hasDisplayableContent(fileInfo.filePath, fileInfo.mtimeMs)) {
-            validSessionIds.add(fileInfo.sessionId);
+        for (const result of contentResults) {
+          if (result.status === 'fulfilled' && result.value.hasContent) {
+            validSessionIds.add(result.value.sessionId);
           }
         }
         totalCount = validSessionIds.size;
@@ -519,35 +539,67 @@ export class ProjectScanner {
       const sessions: Session[] = [];
       let scannedCandidates = 0;
 
-      // Fast path: avoid pre-filtering everything. Scan until we have enough page items.
-      for (let i = startIndex; i < fileInfos.length; i++) {
-        const fileInfo = fileInfos[i];
-        if (!fileInfo) {
-          continue;
-        }
-        scannedCandidates++;
+      // Fetch page items in parallel batches for SSH performance.
+      // Process candidates in chunks, checking content + building metadata concurrently.
+      const BATCH_SIZE = limit + 1; // One extra to detect hasMore
+      let batchStart = startIndex;
 
-        let hasContent: boolean;
+      while (sessions.length < limit + 1 && batchStart < fileInfos.length) {
+        // Take a batch of candidates (overshoot to account for filtered-out items)
+        const batchEnd = Math.min(batchStart + BATCH_SIZE * 2, fileInfos.length);
+        const batch = fileInfos.slice(batchStart, batchEnd);
+        scannedCandidates += batch.length;
+
+        // Step 5a: Check content in parallel
+        let contentBatch: { fileInfo: SessionFileInfo; hasContent: boolean }[];
         if (validSessionIds) {
-          hasContent = validSessionIds.has(fileInfo.sessionId);
+          contentBatch = batch.map((fileInfo) => ({
+            fileInfo,
+            hasContent: validSessionIds.has(fileInfo.sessionId),
+          }));
+        } else if (!shouldFilterNoise) {
+          contentBatch = batch.map((fileInfo) => ({ fileInfo, hasContent: true }));
         } else {
-          hasContent = await this.hasDisplayableContent(fileInfo.filePath, fileInfo.mtimeMs);
-        }
-        if (!hasContent) {
-          continue;
+          const contentResults = await Promise.allSettled(
+            batch.map(async (fileInfo) => ({
+              fileInfo,
+              hasContent: await this.hasDisplayableContent(fileInfo.filePath, fileInfo.mtimeMs),
+            }))
+          );
+          contentBatch = contentResults
+            .filter(
+              (
+                r
+              ): r is PromiseFulfilledResult<{ fileInfo: SessionFileInfo; hasContent: boolean }> =>
+                r.status === 'fulfilled'
+            )
+            .map((r) => r.value);
         }
 
-        const session = await this.buildSessionMetadata(
-          projectId,
-          fileInfo.sessionId,
-          fileInfo.filePath,
-          decodedPath
+        // Step 5b: Build metadata in parallel for items with content
+        const withContent = contentBatch.filter((c) => c.hasContent);
+        const needed = limit + 1 - sessions.length;
+        const toBuild = withContent.slice(0, needed);
+
+        const metadataResults = await Promise.allSettled(
+          toBuild.map(({ fileInfo }) =>
+            this.buildSessionMetadata(
+              projectId,
+              fileInfo.sessionId,
+              fileInfo.filePath,
+              decodedPath,
+              fileInfo.mtimeMs
+            )
+          )
         );
-        sessions.push(session);
 
-        if (sessions.length >= limit + 1) {
-          break;
+        for (const result of metadataResults) {
+          if (result.status === 'fulfilled') {
+            sessions.push(result.value);
+          }
         }
+
+        batchStart = batchEnd;
       }
 
       // Step 6: Build next cursor
@@ -593,23 +645,25 @@ export class ProjectScanner {
     projectId: string,
     sessionId: string,
     filePath: string,
-    projectPath: string
+    projectPath: string,
+    prefetchedMtimeMs?: number
   ): Promise<Session> {
     const stats = await this.fsProvider.stat(filePath);
+    const effectiveMtime = prefetchedMtimeMs ?? stats.mtimeMs;
     const cachedMetadata = this.sessionMetadataCache.get(filePath);
     const metadata =
-      cachedMetadata?.mtimeMs === stats.mtimeMs
+      cachedMetadata?.mtimeMs === effectiveMtime
         ? cachedMetadata.metadata
         : await analyzeSessionFileMetadata(filePath, this.fsProvider);
-    if (cachedMetadata?.mtimeMs !== stats.mtimeMs) {
-      this.sessionMetadataCache.set(filePath, { mtimeMs: stats.mtimeMs, metadata });
+    if (cachedMetadata?.mtimeMs !== effectiveMtime) {
+      this.sessionMetadataCache.set(filePath, { mtimeMs: effectiveMtime, metadata });
     }
 
-    // Check for subagents (delegated to SubagentLocator)
-    const hasSubagents = await this.subagentLocator.hasSubagents(projectId, sessionId);
-
-    // Load task list data if exists
-    const todoData = await this.loadTodoData(sessionId);
+    // Check for subagents and load task list data in parallel
+    const [hasSubagents, todoData] = await Promise.all([
+      this.subagentLocator.hasSubagents(projectId, sessionId),
+      this.loadTodoData(sessionId),
+    ]);
 
     return {
       id: sessionId,
@@ -788,6 +842,31 @@ export class ProjectScanner {
     maxResults: number = 50
   ): Promise<SearchSessionsResult> {
     return this.sessionSearcher.searchSessions(projectId, query, maxResults);
+  }
+
+  /**
+   * Runs async mapping in bounded batches and returns only fulfilled results.
+   * This prevents overwhelming SFTP servers with unbounded parallel requests.
+   */
+  private async collectFulfilledInBatches<T, R>(
+    items: T[],
+    batchSize: number,
+    mapper: (item: T) => Promise<R>
+  ): Promise<R[]> {
+    const safeBatchSize = Math.max(1, batchSize);
+    const results: R[] = [];
+
+    for (let i = 0; i < items.length; i += safeBatchSize) {
+      const batch = items.slice(i, i + safeBatchSize);
+      const settled = await Promise.allSettled(batch.map((item) => mapper(item)));
+      for (const result of settled) {
+        if (result.status === 'fulfilled') {
+          results.push(result.value);
+        }
+      }
+    }
+
+    return results;
   }
 
   /**

@@ -228,23 +228,31 @@ export const createSessionSlice: StateCreator<AppState, [], [], SessionSlice> = 
     }
   },
 
-  // Toggle pin/unpin for a session
+  // Toggle pin/unpin for a session (optimistic update)
   togglePinSession: async (sessionId: string) => {
     const state = get();
     const projectId = state.selectedProjectId;
     if (!projectId) return;
 
     const isPinned = state.pinnedSessionIds.includes(sessionId);
+    const previousPinnedIds = state.pinnedSessionIds;
+
+    // Optimistic: update UI immediately
+    if (isPinned) {
+      set({ pinnedSessionIds: previousPinnedIds.filter((id) => id !== sessionId) });
+    } else {
+      set({ pinnedSessionIds: [sessionId, ...previousPinnedIds] });
+    }
 
     try {
       if (isPinned) {
         await api.config.unpinSession(projectId, sessionId);
-        set({ pinnedSessionIds: state.pinnedSessionIds.filter((id) => id !== sessionId) });
       } else {
         await api.config.pinSession(projectId, sessionId);
-        set({ pinnedSessionIds: [sessionId, ...state.pinnedSessionIds] });
       }
     } catch (error) {
+      // Rollback on failure
+      set({ pinnedSessionIds: previousPinnedIds });
       logger.error('togglePinSession error:', error);
     }
   },

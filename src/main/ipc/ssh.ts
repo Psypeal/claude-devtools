@@ -19,6 +19,7 @@ import {
   SSH_TEST,
 } from '@preload/constants/ipcChannels';
 import { createLogger } from '@shared/utils/logger';
+import * as path from 'path';
 
 import { configManager, ServiceContext } from '../services';
 
@@ -74,6 +75,9 @@ export function registerSshHandlers(ipcMain: IpcMain): void {
       // Get provider and remote path
       const provider = connectionManager.getProvider();
       const remoteProjectsPath = connectionManager.getRemoteProjectsPath() ?? undefined;
+      const remoteTodosPath = remoteProjectsPath
+        ? path.join(path.dirname(remoteProjectsPath), 'todos')
+        : undefined;
 
       // Generate context ID
       const contextId = `ssh-${config.host}`;
@@ -90,6 +94,7 @@ export function registerSshHandlers(ipcMain: IpcMain): void {
         type: 'ssh',
         fsProvider: provider,
         projectsDir: remoteProjectsPath,
+        todosDir: remoteTodosPath,
       });
 
       // Register and start SSH context

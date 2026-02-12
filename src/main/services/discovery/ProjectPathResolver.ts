@@ -72,7 +72,7 @@ export class ProjectPathResolver {
 
     for (const sessionPath of sessionPaths) {
       try {
-        const cwd = await extractCwd(sessionPath);
+        const cwd = await extractCwd(sessionPath, this.fsProvider);
         if (cwd && path.isAbsolute(cwd)) {
           this.projectPathCache.set(projectId, cwd);
           return cwd;

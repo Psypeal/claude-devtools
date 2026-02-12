@@ -71,6 +71,7 @@ export class WorktreeGrouper {
 
     // 2. Filter sessions for each project to only include non-noise sessions
     const projectFilteredSessions = new Map<string, string[]>();
+    const shouldFilterNoise = this.fsProvider.type !== 'ssh';
     await Promise.all(
       projects.map(async (project) => {
         const baseDir = extractBaseDir(project.id);
@@ -83,6 +84,11 @@ export class WorktreeGrouper {
           if (sessionFilter && !sessionFilter.has(sessionId)) {
             continue;
           }
+          if (!shouldFilterNoise) {
+            filteredSessions.push(sessionId);
+            continue;
+          }
+
           const sessionPath = path.join(projectPath, `${sessionId}.jsonl`);
           if (await SessionContentFilter.hasNonNoiseMessages(sessionPath, this.fsProvider)) {
             filteredSessions.push(sessionId);
