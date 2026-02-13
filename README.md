@@ -91,13 +91,30 @@ There are many GUI wrappers for Claude Code — Conductor, Craft Agents, Vibe Ka
 
 ### :mag: Visible Context Reconstruction
 
+<img width="100%" alt="context" src="https://github.com/user-attachments/assets/9ff4a5a7-bcf6-47fb-8ca5-d4021540804b" />
+
 Claude Code doesn't expose what's actually in the context window. claude-devtools reverse-engineers it.
 
-The engine walks each turn of the session and reconstructs the full set of context injections — **CLAUDE.md files** (broken down by global, project, and directory-level), **skill activations**, **@-mentioned files**, **tool call inputs and outputs**, **extended thinking**, **team coordination overhead**, and **user prompt text** — then accumulates them across turns with compaction awareness.
+The engine walks each turn of the session and reconstructs the full set of context injections — **CLAUDE.md files** (broken down by global, project, and directory-level), **skill activations**, **@-mentioned files**, **tool call inputs and outputs**, **extended thinking**, **team coordination overhead**, and **user prompt text**.
 
-**Compaction visualization.** When Claude Code hits its context limit, it silently compresses your conversation and continues. Most tools don't even notice. claude-devtools detects these compaction boundaries, measures the token delta before and after, and visualizes how your context fills, compresses, and refills over the course of a session. You can see exactly what was in the window at any point, and how the composition shifted after each compaction.
+The result is a per-turn breakdown of estimated token attribution across 7 categories, surfaced in three places: a **Context Badge** on each assistant response, a **Token Usage popover** with percentage breakdowns, and a dedicated **Session Context Panel**.
 
-The result is a per-turn breakdown of estimated token attribution across 7 categories, surfaced in three places: a **Context Badge** on each assistant response, a **Token Usage popover** with percentage breakdowns, and a dedicated **Session Context Panel** with drill-down into every injection across compaction boundaries.
+### :chart_with_downwards_trend: Compaction Visualization
+
+<video src="https://github.com/user-attachments/assets/25281f09-05ed-4f81-97bc-7b1754b08b06" controls="controls" muted="muted" style="max-width: 100%;"></video>
+
+**See the moment your context hits the limit.**
+
+When Claude Code hits its context limit, it silently compresses your conversation and continues. Most tools don't even notice this happened. 
+
+claude-devtools detects these compaction boundaries, measures the token delta before and after, and visualizes how your context fills, compresses, and refills over the course of a session. You can see exactly what was in the window at any point, and how the composition shifted after each compaction event.
+
+
+### :bell: Custom Notification Triggers
+
+<video src="https://github.com/user-attachments/assets/3b07b3b4-57af-49ed-9539-be7c56a244f5" controls="controls" muted="muted" style="max-width: 100%;"></video>
+
+Define rules for when you want to receive **system notifications**. Match on regex patterns, assign colors, and filter your inbox by trigger. Built-in triggers catch common errors out of the box; add your own for project-specific patterns.
 
 ### :hammer_and_wrench: Rich Tool Call Inspector
 
@@ -107,9 +124,6 @@ Every tool call is paired with its result in an expandable card. Specialized vie
 - **Bash** calls show command output
 - **Subagent** calls show the full execution tree, expandable in-place
 
-### :bell: Custom Notification Triggers
-
-Define rules for when you want to receive **system notifications**. Match on regex patterns, assign colors, and filter your inbox by trigger. Built-in triggers catch common errors out of the box; add your own for project-specific patterns.
 
 ### :busts_in_silhouette: Team & Subagent Visualization
 
