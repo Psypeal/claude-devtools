@@ -52,7 +52,8 @@
 
 | Platform | Download | Notes |
 |----------|----------|-------|
-| **macOS** (Apple Silicon) | [`.dmg`](https://github.com/matt1398/claude-devtools/releases/latest) | Drag to Applications. On first launch: right-click → Open |
+| **macOS** (Apple Silicon) | [`.dmg`](https://github.com/matt1398/claude-devtools/releases/latest) | Download the `arm64` asset. Drag to Applications. On first launch: right-click → Open |
+| **macOS** (Intel) | [`.dmg`](https://github.com/matt1398/claude-devtools/releases/latest) | Download the `x64` asset. Drag to Applications. On first launch: right-click → Open |
 | **Windows** | [`.exe`](https://github.com/matt1398/claude-devtools/releases/latest) | Standard installer. May trigger SmartScreen — click "More info" → "Run anyway" |
 
 The app reads session logs from `~/.claude/` — the data is already on your machine. No setup, no API keys, no login.
@@ -201,7 +202,8 @@ The app auto-discovers your Claude Code projects from `~/.claude/`.
 #### Build for Distribution
 
 ```bash
-pnpm dist:mac     # macOS (.dmg)
+pnpm dist:mac:arm64  # macOS Apple Silicon (.dmg)
+pnpm dist:mac:x64    # macOS Intel (.dmg)
 pnpm dist:win     # Windows (.exe)
 pnpm dist         # Both platforms
 ```

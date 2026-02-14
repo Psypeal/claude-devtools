@@ -49,7 +49,17 @@ jobs:
 
   release-mac:
     needs: build
-    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-14
+            dist_command: pnpm dist:mac:arm64
+          - arch: x64
+            runner: macos-13
+            dist_command: pnpm dist:mac:x64
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: Checkout
@@ -83,16 +93,16 @@ jobs:
           VERSION="${GITHUB_REF#refs/tags/v}"
           pnpm pkg set version="$VERSION"
 
-      - name: Build app (macOS)
+      - name: Build app (macOS ${{ matrix.arch }})
         run: pnpm build
 
-      - name: Verify packaged inputs (macOS)
+      - name: Verify packaged inputs (macOS ${{ matrix.arch }})
         run: |
           test -f dist-electron/main/index.cjs
           test -f dist-electron/preload/index.js
           test -f out/renderer/index.html
 
-      - name: Package & Release (macOS)
+      - name: Package & Release (macOS ${{ matrix.arch }})
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
@@ -100,7 +110,7 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: pnpm dist:mac
+        run: ${{ matrix.dist_command }}
 
   release-win:
     needs: build

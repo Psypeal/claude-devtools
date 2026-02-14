@@ -435,23 +435,83 @@ export class SshConnectionManager extends EventEmitter {
   }
 
   private async resolveRemoteProjectsPath(username: string): Promise<string> {
-    // Try to resolve the remote home directory
-    // SFTP doesn't have a direct "get home dir" call, so we try common paths
+    // Prefer remote $HOME when available, then fall back to common paths.
+    const remoteHome = await this.resolveRemoteHomeDirectory();
     const candidates = [
+      ...(remoteHome ? [path.posix.join(remoteHome, '.claude', 'projects')] : []),
       `/home/${username}/.claude/projects`,
       `/Users/${username}/.claude/projects`,
       `/root/.claude/projects`,
     ];
 
-    for (const candidate of candidates) {
+    for (const candidate of [...new Set(candidates)]) {
       if (await this.provider.exists(candidate)) {
         return candidate;
       }
     }
 
-    // Fallback: try to read from environment via realpath of ~
-    // Default to Linux convention
+    // Fallback to inferred home-based path when we could resolve $HOME.
+    if (remoteHome) {
+      return path.posix.join(remoteHome, '.claude', 'projects');
+    }
+
+    // Final fallback: Linux convention.
     return `/home/${username}/.claude/projects`;
+  }
+
+  /**
+   * Resolve remote user's home directory by querying `$HOME` over SSH.
+   */
+  private async resolveRemoteHomeDirectory(): Promise<string | null> {
+    if (!this.client) {
+      return null;
+    }
+
+    try {
+      const home = await this.execRemoteCommand('printf %s "$HOME"');
+      const normalized = home.trim();
+      return normalized.startsWith('/') ? normalized : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Execute a command on the connected SSH host and return stdout.
+   */
+  private async execRemoteCommand(command: string): Promise<string> {
+    const client = this.client;
+    if (!client) {
+      throw new Error('SSH client is not connected');
+    }
+
+    return new Promise<string>((resolve, reject) => {
+      client.exec(command, (err, stream) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        let stdout = '';
+        let stderr = '';
+
+        stream.on('data', (chunk: Buffer | string) => {
+          stdout += chunk.toString();
+        });
+
+        stream.stderr.on('data', (chunk: Buffer | string) => {
+          stderr += chunk.toString();
+        });
+
+        stream.on('close', (code: number | null) => {
+          if (code === 0) {
+            resolve(stdout);
+            return;
+          }
+          reject(new Error(stderr.trim() || `Remote command failed with exit code ${code}`));
+        });
+      });
+    });
   }
 
   private handleDisconnect(): void {
