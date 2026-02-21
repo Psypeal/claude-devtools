@@ -110,8 +110,18 @@ describe('analyzeSession', () => {
       expect(report.tokenDensityTimeline.quartiles).toHaveLength(4);
       expect(report.tokenDensityTimeline.quartiles.every((q) => q.avgTokens === 0)).toBe(true);
 
-      expect(report.compactionCount).toBe(0);
+      expect(report.compaction.count).toBe(0);
+      expect(report.compaction.compactSummaryCount).toBe(0);
       expect(report.gitBranches).toEqual([]);
+
+      // New sections
+      expect(report.skillsInvoked).toEqual([]);
+      expect(report.bashCommands.total).toBe(0);
+      expect(report.lifecycleTasks).toEqual([]);
+      expect(report.userQuestions).toEqual([]);
+      expect(report.outOfScopeFindings).toEqual([]);
+      expect(report.agentTree.agentCount).toBe(0);
+      expect(report.subagentsList).toEqual([]);
     });
   });
 
@@ -999,6 +1009,176 @@ describe('analyzeSession', () => {
       expect(report.thrashingSignals.editReworkFiles).toHaveLength(1);
       expect(report.thrashingSignals.editReworkFiles[0].filePath).toBe('/foo.ts');
       expect(report.thrashingSignals.editReworkFiles[0].editIndices).toHaveLength(3);
+    });
+  });
+
+  describe('skills invoked', () => {
+    it('tracks Skill tool calls', () => {
+      const messages: ParsedMessage[] = [
+        createMockMessage({
+          type: 'assistant',
+          toolCalls: [
+            {
+              id: 'tc-1',
+              name: 'Skill',
+              input: { skill: 'brainstorming', args: '--verbose' },
+              isTask: false,
+            },
+            { id: 'tc-2', name: 'Skill', input: { skill: 'writing-plans' }, isTask: false },
+          ],
+        }),
+      ];
+
+      const report = analyzeSession(createMockDetail({ messages }));
+
+      expect(report.skillsInvoked).toHaveLength(2);
+      expect(report.skillsInvoked[0].skill).toBe('brainstorming');
+      expect(report.skillsInvoked[0].argsPreview).toBe('--verbose');
+      expect(report.skillsInvoked[1].skill).toBe('writing-plans');
+    });
+  });
+
+  describe('bash commands', () => {
+    it('tracks total, unique, and repeated commands', () => {
+      const messages: ParsedMessage[] = [
+        createMockMessage({
+          type: 'assistant',
+          toolCalls: [
+            { id: 'tc-1', name: 'Bash', input: { command: 'pnpm test' }, isTask: false },
+            { id: 'tc-2', name: 'Bash', input: { command: 'pnpm test' }, isTask: false },
+            { id: 'tc-3', name: 'Bash', input: { command: 'git status' }, isTask: false },
+          ],
+        }),
+      ];
+
+      const report = analyzeSession(createMockDetail({ messages }));
+
+      expect(report.bashCommands.total).toBe(3);
+      expect(report.bashCommands.unique).toBe(2);
+      expect(report.bashCommands.repeated['pnpm test']).toBe(2);
+    });
+  });
+
+  describe('subagents list', () => {
+    it('tracks Task tool dispatches', () => {
+      const messages: ParsedMessage[] = [
+        createMockMessage({
+          type: 'assistant',
+          toolCalls: [
+            {
+              id: 'tc-1',
+              name: 'Task',
+              input: {
+                description: 'explore auth',
+                subagent_type: 'Explore',
+                run_in_background: true,
+              },
+              isTask: true,
+            },
+          ],
+        }),
+      ];
+
+      const report = analyzeSession(createMockDetail({ messages }));
+
+      expect(report.subagentsList).toHaveLength(1);
+      expect(report.subagentsList[0].description).toBe('explore auth');
+      expect(report.subagentsList[0].subagentType).toBe('Explore');
+      expect(report.subagentsList[0].runInBackground).toBe(true);
+    });
+  });
+
+  describe('lifecycle tasks', () => {
+    it('tracks TaskCreate subjects', () => {
+      const messages: ParsedMessage[] = [
+        createMockMessage({
+          type: 'assistant',
+          toolCalls: [
+            { id: 'tc-1', name: 'TaskCreate', input: { subject: 'Add login page' }, isTask: false },
+            { id: 'tc-2', name: 'TaskCreate', input: { subject: 'Write tests' }, isTask: false },
+          ],
+        }),
+      ];
+
+      const report = analyzeSession(createMockDetail({ messages }));
+
+      expect(report.lifecycleTasks).toEqual(['Add login page', 'Write tests']);
+    });
+  });
+
+  describe('user questions', () => {
+    it('tracks AskUserQuestion calls', () => {
+      const messages: ParsedMessage[] = [
+        createMockMessage({
+          type: 'assistant',
+          toolCalls: [
+            {
+              id: 'tc-1',
+              name: 'AskUserQuestion',
+              input: {
+                questions: [
+                  {
+                    question: 'Which auth method?',
+                    options: [{ label: 'JWT' }, { label: 'OAuth' }],
+                  },
+                ],
+              },
+              isTask: false,
+            },
+          ],
+        }),
+      ];
+
+      const report = analyzeSession(createMockDetail({ messages }));
+
+      expect(report.userQuestions).toHaveLength(1);
+      expect(report.userQuestions[0].question).toBe('Which auth method?');
+      expect(report.userQuestions[0].options).toEqual(['JWT', 'OAuth']);
+    });
+  });
+
+  describe('out-of-scope findings', () => {
+    it('detects pre-existing and tech debt mentions', () => {
+      const messages: ParsedMessage[] = [
+        createMockMessage({
+          type: 'assistant',
+          content: 'This is a pre-existing issue that was there before our changes.',
+        }),
+        createMockMessage({
+          type: 'assistant',
+          content: 'I noticed some tech debt in the authentication module.',
+        }),
+      ];
+
+      const report = analyzeSession(createMockDetail({ messages }));
+
+      expect(report.outOfScopeFindings).toHaveLength(2);
+      expect(report.outOfScopeFindings[0].keyword).toBe('pre-existing');
+      expect(report.outOfScopeFindings[1].keyword).toBe('tech debt');
+    });
+  });
+
+  describe('compaction', () => {
+    it('tracks compaction count and summary messages', () => {
+      const messages: ParsedMessage[] = [
+        createMockMessage({ type: 'assistant', isCompactSummary: true }),
+        createMockMessage({ type: 'assistant', isCompactSummary: true }),
+      ];
+
+      const session = createMockSession();
+      session.compactionCount = 2;
+      const report = analyzeSession(createMockDetail({ messages, session }));
+
+      expect(report.compaction.count).toBe(2);
+      expect(report.compaction.compactSummaryCount).toBe(2);
+      expect(report.compaction.note).toContain('underwent compaction');
+    });
+
+    it('reports no compaction', () => {
+      const report = analyzeSession(createMockDetail({}));
+
+      expect(report.compaction.count).toBe(0);
+      expect(report.compaction.note).toContain('No compaction');
     });
   });
 });

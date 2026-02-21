@@ -7,6 +7,7 @@ import { CostSection } from './sections/CostSection';
 import { ErrorSection } from './sections/ErrorSection';
 import { FrictionSection } from './sections/FrictionSection';
 import { GitSection } from './sections/GitSection';
+import { InsightsSection } from './sections/InsightsSection';
 import { OverviewSection } from './sections/OverviewSection';
 import { QualitySection } from './sections/QualitySection';
 import { SubagentSection } from './sections/SubagentSection';
@@ -62,6 +63,15 @@ export const SessionReportTab = ({ tab }: SessionReportTabProps) => {
           prompt={report.promptQuality}
           startup={report.startupOverhead}
           testProgression={report.testProgression}
+        />
+        <InsightsSection
+          skills={report.skillsInvoked}
+          bash={report.bashCommands}
+          lifecycleTasks={report.lifecycleTasks}
+          userQuestions={report.userQuestions}
+          outOfScope={report.outOfScopeFindings}
+          agentTree={report.agentTree}
+          subagentsList={report.subagentsList}
         />
       </div>
     </div>

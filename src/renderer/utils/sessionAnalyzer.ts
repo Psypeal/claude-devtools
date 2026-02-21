@@ -9,6 +9,7 @@
  */
 
 import type {
+  AgentTreeNode,
   FrictionCorrection,
   GitCommit,
   IdleGap,
@@ -16,11 +17,15 @@ import type {
   ModelPricing,
   ModelSwitch,
   ModelTokenStats,
+  OutOfScopeFindings,
   SessionReport,
+  SkillInvocation,
+  SubagentBasicEntry,
   SubagentEntry,
   TestSnapshot,
   ThinkingBlockAnalysis,
   ToolError,
+  UserQuestion,
 } from '@renderer/types/sessionReport';
 import type {
   ContentBlock,
@@ -367,6 +372,38 @@ export function analyzeSession(detail: SessionDetail): SessionReport {
   let firstUserMessageLength = 0;
   let firstUserSeen = false;
 
+  // Skills invoked
+  const skillsInvoked: SkillInvocation[] = [];
+
+  // Bash commands
+  const bashCmds: string[] = [];
+
+  // Subagents list (backward compat)
+  const subagentsList: SubagentBasicEntry[] = [];
+
+  // Lifecycle tasks
+  const lifecycleTasks: string[] = [];
+
+  // User questions
+  const userQuestions: UserQuestion[] = [];
+
+  // Out-of-scope findings
+  const OUT_OF_SCOPE_KEYWORDS = [
+    'pre-existing',
+    'out of scope',
+    'tech debt',
+    'anti-pattern',
+    'existed before',
+  ];
+  const outOfScopeFindings: OutOfScopeFindings[] = [];
+
+  // Agent tree metadata
+  const agentTreeNodes: AgentTreeNode[] = [];
+
+  // Compact summary count
+
+  let compactSummaryCount = 0;
+
   // ===================================================================
   // SINGLE PASS
   // ===================================================================
@@ -435,7 +472,21 @@ export function analyzeSession(detail: SessionDetail): SessionReport {
     // --- Git branches ---
     if (m.gitBranch) branches.add(m.gitBranch);
 
-    // --- Compact summaries (counted but not accumulated separately) ---
+    // --- Compact summaries ---
+    if (m.isCompactSummary) compactSummaryCount++;
+
+    // --- Agent tree metadata ---
+    if (m.agentId) {
+      // agentType/teamName/parentToolUseId may exist on raw data but not typed in ParsedMessage
+      const raw = m as unknown as Record<string, unknown>;
+      agentTreeNodes.push({
+        agentId: m.agentId,
+        agentType: (raw.agentType as string) ?? 'unknown',
+        teamName: (raw.teamName as string) ?? '',
+        parentToolUseId: (raw.parentToolUseId as string) ?? '',
+        messageIndex: i,
+      });
+    }
 
     // --- Thinking blocks (with content analysis) ---
     if (Array.isArray(m.content)) {
@@ -507,6 +558,8 @@ export function analyzeSession(detail: SessionDetail): SessionReport {
       // Bash commands
       if (toolName === 'Bash') {
         const cmd = typeof inp.command === 'string' ? inp.command : '';
+        const cmdTrunc = cmd.slice(0, 200);
+        bashCmds.push(cmdTrunc);
         // Thrashing: bash prefix groups
         const prefix = cmd.slice(0, 40);
         bashPrefixGroups.set(prefix, (bashPrefixGroups.get(prefix) ?? 0) + 1);
@@ -527,6 +580,42 @@ export function analyzeSession(detail: SessionDetail): SessionReport {
         if (cmd.includes('git checkout -b') || cmd.includes('git switch -c')) {
           const branchMatch = /git (?:checkout -b|switch -c)\s+(\S+)/.exec(cmd);
           if (branchMatch) gitBranchCreations.push(branchMatch[1]);
+        }
+      }
+
+      // Skills
+      if (toolName === 'Skill') {
+        skillsInvoked.push({
+          skill: (inp.skill as string) ?? 'unknown',
+          argsPreview: String(inp.args ?? '').slice(0, 120),
+        });
+      }
+
+      // Task (subagent list)
+      if (toolName === 'Task') {
+        subagentsList.push({
+          description: (inp.description as string) ?? 'unknown',
+          subagentType: (inp.subagent_type as string) ?? 'unknown',
+          model: (inp.model as string) ?? 'default (inherits parent)',
+          runInBackground: (inp.run_in_background as boolean) ?? false,
+        });
+      }
+
+      // TaskCreate
+      if (toolName === 'TaskCreate') {
+        lifecycleTasks.push((inp.subject as string) ?? 'unknown');
+      }
+
+      // AskUserQuestion
+      if (toolName === 'AskUserQuestion') {
+        const questions = inp.questions as { question?: string; options?: { label?: string }[] }[];
+        if (Array.isArray(questions)) {
+          for (const q of questions) {
+            userQuestions.push({
+              question: q.question ?? '',
+              options: Array.isArray(q.options) ? q.options.map((o) => o.label ?? '') : [],
+            });
+          }
         }
       }
 
@@ -615,6 +704,25 @@ export function analyzeSession(detail: SessionDetail): SessionReport {
             });
             break;
           }
+        }
+      }
+    }
+
+    // --- Out-of-scope findings (assistant messages) ---
+    if (msgType === 'assistant') {
+      const contentText = extractTextContent(m);
+      const contentLower = contentText.toLowerCase();
+      for (const kw of OUT_OF_SCOPE_KEYWORDS) {
+        const kwIdx = contentLower.indexOf(kw.toLowerCase());
+        if (kwIdx >= 0) {
+          const start = Math.max(0, kwIdx - 80);
+          const end = Math.min(contentText.length, kwIdx + 300);
+          outOfScopeFindings.push({
+            keyword: kw,
+            messageIndex: i,
+            snippet: contentText.slice(start, end).replace(/\n/g, ' ').trim(),
+          });
+          break;
         }
       }
     }
@@ -1040,6 +1148,8 @@ export function analyzeSession(detail: SessionDetail): SessionReport {
 
     subagentMetrics: saFromProcesses,
 
+    subagentsList,
+
     errors: {
       errors,
       permissionDenials: {
@@ -1140,8 +1250,6 @@ export function analyzeSession(detail: SessionDetail): SessionReport {
 
     messageTypes,
 
-    serviceTiers: {},
-
     fileReadRedundancy: {
       totalReads,
       uniqueFiles,
@@ -1149,9 +1257,51 @@ export function analyzeSession(detail: SessionDetail): SessionReport {
       redundantFiles,
     },
 
-    compactionCount: session.compactionCount ?? 0,
+    compaction: {
+      count: session.compactionCount ?? 0,
+      compactSummaryCount,
+      note:
+        (session.compactionCount ?? 0) > 0
+          ? 'Session underwent compaction, which may have caused loss of earlier context. Check for repeated work after compaction events.'
+          : 'No compaction occurred — session stayed within context limits.',
+    },
 
     gitBranches: [...branches],
+
+    skillsInvoked,
+
+    bashCommands: {
+      total: bashCmds.length,
+      unique: new Set(bashCmds).size,
+      repeated: Object.fromEntries(
+        [
+          ...bashCmds
+            .reduce((acc, cmd) => acc.set(cmd, (acc.get(cmd) ?? 0) + 1), new Map<string, number>())
+            .entries(),
+        ]
+          .filter(([, count]) => count > 1)
+          .sort((a, b) => b[1] - a[1])
+      ),
+    },
+
+    lifecycleTasks,
+
+    userQuestions,
+
+    outOfScopeFindings,
+
+    agentTree: (() => {
+      const uniqueAgents = new Map<string, AgentTreeNode>();
+      for (const node of agentTreeNodes) {
+        if (!uniqueAgents.has(node.agentId)) uniqueAgents.set(node.agentId, node);
+      }
+      return {
+        agentCount: uniqueAgents.size,
+        agents: [...uniqueAgents.values()],
+        hasTeamMode: agentTreeNodes.some((n) => n.teamName),
+        teamNames: [...new Set(agentTreeNodes.filter((n) => n.teamName).map((n) => n.teamName))],
+      };
+    })(),
   };
 
   return report;

@@ -274,6 +274,60 @@ export interface ReportFileReadRedundancy {
 }
 
 // =============================================================================
+// Missing Sections (ported from Python analyzer)
+// =============================================================================
+
+export interface SkillInvocation {
+  skill: string;
+  argsPreview: string;
+}
+
+export interface ReportBashCommands {
+  total: number;
+  unique: number;
+  repeated: Record<string, number>;
+}
+
+export interface UserQuestion {
+  question: string;
+  options: string[];
+}
+
+export interface OutOfScopeFindings {
+  keyword: string;
+  messageIndex: number;
+  snippet: string;
+}
+
+export interface AgentTreeNode {
+  agentId: string;
+  agentType: string;
+  teamName: string;
+  parentToolUseId: string;
+  messageIndex: number;
+}
+
+export interface ReportAgentTree {
+  agentCount: number;
+  agents: AgentTreeNode[];
+  hasTeamMode: boolean;
+  teamNames: string[];
+}
+
+export interface ReportCompaction {
+  count: number;
+  compactSummaryCount: number;
+  note: string;
+}
+
+export interface SubagentBasicEntry {
+  description: string;
+  subagentType: string;
+  model: string;
+  runInBackground: boolean;
+}
+
+// =============================================================================
 // Combined Report
 // =============================================================================
 
@@ -284,6 +338,7 @@ export interface SessionReport {
   cacheEconomics: ReportCacheEconomics;
   toolUsage: ReportToolUsage;
   subagentMetrics: ReportSubagentMetrics;
+  subagentsList: SubagentBasicEntry[];
   errors: ReportErrors;
   gitActivity: ReportGitActivity;
   frictionSignals: ReportFrictionSignals;
@@ -299,8 +354,13 @@ export interface SessionReport {
   thinkingBlocks: ReportThinkingBlocks;
   keyEvents: KeyEvent[];
   messageTypes: Record<string, number>;
-  serviceTiers: Record<string, number>;
   fileReadRedundancy: ReportFileReadRedundancy;
-  compactionCount: number;
+  compaction: ReportCompaction;
   gitBranches: string[];
+  skillsInvoked: SkillInvocation[];
+  bashCommands: ReportBashCommands;
+  lifecycleTasks: string[];
+  userQuestions: UserQuestion[];
+  outOfScopeFindings: OutOfScopeFindings[];
+  agentTree: ReportAgentTree;
 }
