@@ -10,6 +10,12 @@ import { ChevronsDown } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { SessionContextPanel } from './SessionContextPanel/index';
+
+/** Pixels from bottom considered "near bottom" for scroll-button visibility and auto-scroll. */
+const SCROLL_THRESHOLD = 300;
+/** Must match the `w-80` (320px) context panel width used in the layout below. */
+const CONTEXT_PANEL_WIDTH_PX = 320;
+
 import { ChatHistoryEmptyState } from './ChatHistoryEmptyState';
 import { ChatHistoryItem } from './ChatHistoryItem';
 import { ChatHistoryLoadingState } from './ChatHistoryLoadingState';
@@ -351,14 +357,14 @@ export const ChatHistory = ({ tabId }: ChatHistoryProps): JSX.Element => {
     const container = scrollContainerRef.current;
     if (!container) return;
     const { scrollTop, scrollHeight, clientHeight } = container;
-    setShowScrollButton(!isNearBottom(scrollTop, scrollHeight, clientHeight, 300));
+    setShowScrollButton(!isNearBottom(scrollTop, scrollHeight, clientHeight, SCROLL_THRESHOLD));
   }, []);
 
   // Auto-follow when conversation updates, but only if the user was already near bottom.
   // This preserves manual reading position when the user scrolls up.
   // Disabled during navigation to prevent conflicts with deep-link/search scrolling.
   const { scrollToBottom } = useAutoScrollBottom([conversation], {
-    threshold: 300,
+    threshold: SCROLL_THRESHOLD,
     smoothDuration: 300,
     autoBehavior: 'auto',
     disabled: shouldDisableAutoScroll,
@@ -841,7 +847,7 @@ export const ChatHistory = ({ tabId }: ChatHistoryProps): JSX.Element => {
             style={{
               right:
                 isContextPanelVisible && allContextInjections.length > 0
-                  ? 'calc(320px + 1rem)'
+                  ? `calc(${CONTEXT_PANEL_WIDTH_PX}px + 1rem)`
                   : '1rem',
               backgroundColor: 'var(--context-btn-bg)',
               color: 'var(--color-text-secondary)',

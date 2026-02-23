@@ -348,10 +348,15 @@ export const TabBar = ({ paneId }: TabBarProps): React.JSX.Element => {
       </div>
 
       {/* Drag spacer — fills empty space between tab list and action buttons.
-          Gives users a reliable window-drag target regardless of how many tabs are open. */}
+          Gives users a reliable window-drag target regardless of how many tabs are open.
+          Only applied on the leftmost pane in Electron to match the TabBar drag region logic. */}
       <div
         className="flex-1 self-stretch"
-        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+        style={
+          {
+            WebkitAppRegion: isElectronMode() && isLeftmostPane ? 'drag' : undefined,
+          } as React.CSSProperties
+        }
       />
 
       {/* Right side actions */}
