@@ -46,6 +46,7 @@ export interface TabSlice {
   closeTab: (tabId: string) => void;
   setActiveTab: (tabId: string) => void;
   openDashboard: () => void;
+  openSessionReport: (sourceTabId: string) => void;
   getActiveTab: () => Tab | null;
   isSessionOpen: (sessionId: string) => boolean;
   enqueueTabNavigation: (tabId: string, request: TabNavigationRequest) => void;
@@ -380,6 +381,28 @@ export const createTabSlice: StateCreator<AppState, [], [], TabSlice> = (set, ge
     set(syncFromLayout(newLayout));
   },
 
+  // Open a session report tab based on a source session tab
+  openSessionReport: (sourceTabId: string) => {
+    const state = get();
+    const allTabs = getAllTabs(state.paneLayout);
+    const sourceTab = allTabs.find((t) => t.id === sourceTabId);
+    if (sourceTab?.type !== 'session') return;
+    if (!sourceTab.sessionId || !sourceTab.projectId) return;
+
+    const tabData = state.tabSessionData[sourceTabId];
+    const firstMsg = tabData?.sessionDetail?.session.firstMessage;
+    const label = firstMsg
+      ? `Report: ${firstMsg.slice(0, 30)}${firstMsg.length > 30 ? '…' : ''}`
+      : 'Session Report';
+
+    state.openTab({
+      type: 'report',
+      label,
+      projectId: sourceTab.projectId,
+      sessionId: sourceTab.sessionId,
+    });
+  },
+
   // Get the currently active tab (from the focused pane)
   getActiveTab: () => {
     const state = get();
@@ -649,11 +672,6 @@ export const createTabSlice: StateCreator<AppState, [], [], TabSlice> = (set, ge
   ) => {
     const state = get();
 
-    // If different project, select it first
-    if (state.selectedProjectId !== projectId) {
-      state.selectProject(projectId);
-    }
-
     // Check if session tab is already open in any pane
     const allTabs = getAllTabs(state.paneLayout);
     const existingTab =
@@ -703,6 +721,9 @@ export const createTabSlice: StateCreator<AppState, [], [], TabSlice> = (set, ge
         const newState = get();
         const newTabId = newState.activeTabId;
         if (newTabId) {
+          // Re-focus tab via setActiveTab for proper sidebar sync
+          state.setActiveTab(newTabId);
+
           const searchPayload = {
             query: searchContext.query,
             messageTimestamp: searchContext.messageTimestamp,
@@ -730,11 +751,6 @@ export const createTabSlice: StateCreator<AppState, [], [], TabSlice> = (set, ge
       // Fetch session detail for the new tab (with tabId for per-tab data)
       const newTabIdForFetch = get().activeTabId ?? undefined;
       void state.fetchSessionDetail(projectId, sessionId, newTabIdForFetch);
-    }
-
-    // If opened from search, clear sidebar selection to deselect
-    if (fromSearch) {
-      set({ selectedSessionId: null });
     }
   },
 });

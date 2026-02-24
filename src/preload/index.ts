@@ -135,6 +135,8 @@ const electronAPI: ElectronAPI = {
   ) => ipcRenderer.invoke('get-sessions-paginated', projectId, cursor, limit, options),
   searchSessions: (projectId: string, query: string, maxResults?: number) =>
     ipcRenderer.invoke('search-sessions', projectId, query, maxResults),
+  searchAllProjects: (query: string, maxResults?: number) =>
+    ipcRenderer.invoke('search-all-projects', query, maxResults),
   getSessionDetail: (projectId: string, sessionId: string) =>
     ipcRenderer.invoke('get-session-detail', projectId, sessionId),
   getSessionMetrics: (projectId: string, sessionId: string) =>
@@ -166,6 +168,10 @@ const electronAPI: ElectronAPI = {
     ipcRenderer.invoke('read-directory-claude-md', dirPath),
   readMentionedFile: (absolutePath: string, projectRoot: string, maxTokens?: number) =>
     ipcRenderer.invoke('read-mentioned-file', absolutePath, projectRoot, maxTokens),
+
+  // Agent config reading
+  readAgentConfigs: (projectRoot: string) =>
+    ipcRenderer.invoke('read-agent-configs', projectRoot),
 
   // Notifications API
   notifications: {

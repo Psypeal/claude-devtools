@@ -41,6 +41,7 @@ import type {
   WaterfallData,
   WslClaudeRootCandidate,
 } from '@shared/types';
+import type { AgentConfig } from '@shared/types/api';
 
 export class HttpAPIClient implements ElectronAPI {
   private baseUrl: string;
@@ -214,6 +215,12 @@ export class HttpAPIClient implements ElectronAPI {
     );
   };
 
+  searchAllProjects = (query: string, maxResults?: number): Promise<SearchSessionsResult> => {
+    const params = new URLSearchParams({ q: query });
+    if (maxResults) params.set('maxResults', String(maxResults));
+    return this.get<SearchSessionsResult>(`/api/search?${params}`);
+  };
+
   getSessionDetail = (projectId: string, sessionId: string): Promise<SessionDetail | null> =>
     this.get<SessionDetail | null>(
       `/api/projects/${encodeURIComponent(projectId)}/sessions/${encodeURIComponent(sessionId)}`
@@ -302,6 +309,13 @@ export class HttpAPIClient implements ElectronAPI {
       projectRoot,
       maxTokens,
     });
+
+  // ---------------------------------------------------------------------------
+  // Agent config reading
+  // ---------------------------------------------------------------------------
+
+  readAgentConfigs = (projectRoot: string): Promise<Record<string, AgentConfig>> =>
+    this.post<Record<string, AgentConfig>>('/api/read-agent-configs', { projectRoot });
 
   // ---------------------------------------------------------------------------
   // Notifications (nested API)

@@ -1074,6 +1074,74 @@ export class ProjectScanner {
   }
 
   /**
+   * Searches sessions across all projects for a query string.
+   * Filters out noise messages and returns matching content.
+   *
+   * @param query - Search query string
+   * @param maxResults - Maximum number of results to return (default 50)
+   */
+  async searchAllProjects(query: string, maxResults: number = 50): Promise<SearchSessionsResult> {
+    const startedAt = Date.now();
+    try {
+      if (!query || query.trim().length === 0) {
+        return { results: [], totalMatches: 0, sessionsSearched: 0, query };
+      }
+
+      // Get all projects
+      const projects = await this.scan();
+
+      if (projects.length === 0) {
+        return { results: [], totalMatches: 0, sessionsSearched: 0, query };
+      }
+
+      // Search across all projects with bounded concurrency
+      const allResults: SearchSessionsResult[] = [];
+      const searchBatchSize = this.fsProvider.type === 'ssh' ? 2 : 4;
+
+      for (let i = 0; i < projects.length; i += searchBatchSize) {
+        const batch = projects.slice(i, i + searchBatchSize);
+        const batchResults = await Promise.allSettled(
+          batch.map((project) => this.sessionSearcher.searchSessions(project.id, query, maxResults))
+        );
+
+        for (const result of batchResults) {
+          if (result.status === 'fulfilled') {
+            allResults.push(result.value);
+          }
+        }
+
+        // Check if we have enough results already
+        const totalMatches = allResults.reduce((sum, r) => sum + r.totalMatches, 0);
+        if (totalMatches >= maxResults) {
+          break;
+        }
+      }
+
+      // Merge results from all projects
+      const mergedResults = allResults.flatMap((r) => r.results);
+      const totalSessionsSearched = allResults.reduce((sum, r) => sum + r.sessionsSearched, 0);
+
+      // Sort by timestamp (most recent first) and limit to maxResults
+      mergedResults.sort((a, b) => b.timestamp - a.timestamp);
+      const limitedResults = mergedResults.slice(0, maxResults);
+
+      logger.debug(
+        `Global search completed: ${limitedResults.length} results from ${totalSessionsSearched} sessions across ${projects.length} projects in ${Date.now() - startedAt}ms`
+      );
+
+      return {
+        results: limitedResults,
+        totalMatches: limitedResults.length,
+        sessionsSearched: totalSessionsSearched,
+        query,
+      };
+    } catch (error) {
+      logger.error('Error searching all projects:', error);
+      return { results: [], totalMatches: 0, sessionsSearched: 0, query };
+    }
+  }
+
+  /**
    * Resolve best-available file timestamps from directory entry metadata or stat fallback.
    */
   private async resolveFileDetails(
