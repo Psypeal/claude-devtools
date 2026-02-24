@@ -22,6 +22,7 @@ import {
   detectModelMismatch,
   detectSwitchPattern,
 } from '@renderer/utils/reportAssessments';
+import { calculateMessageCost } from '@shared/utils/pricing';
 
 import type {
   AgentTreeNode,
@@ -29,7 +30,6 @@ import type {
   GitCommit,
   IdleGap,
   KeyEvent,
-  ModelPricing,
   ModelSwitch,
   ModelTokenStats,
   OutOfScopeFindings,
@@ -53,81 +53,8 @@ import type {
   ToolCall,
 } from '@shared/types';
 
-// =============================================================================
-// Pricing Table (USD per 1M tokens)
-// =============================================================================
-
-const MODEL_PRICING: Record<string, ModelPricing> = {
-  'opus-4': {
-    input: 15.0,
-    output: 75.0,
-    cache_read: 1.5,
-    cache_creation: 18.75,
-  },
-  'sonnet-4': {
-    input: 3.0,
-    output: 15.0,
-    cache_read: 0.3,
-    cache_creation: 3.75,
-  },
-  'haiku-4': {
-    input: 0.8,
-    output: 4.0,
-    cache_read: 0.08,
-    cache_creation: 1.0,
-  },
-  'opus-3': {
-    input: 15.0,
-    output: 75.0,
-    cache_read: 1.5,
-    cache_creation: 18.75,
-  },
-  'sonnet-3': {
-    input: 3.0,
-    output: 15.0,
-    cache_read: 0.3,
-    cache_creation: 3.75,
-  },
-  'haiku-3': {
-    input: 0.25,
-    output: 1.25,
-    cache_read: 0.03,
-    cache_creation: 0.3,
-  },
-};
-
-const DEFAULT_PRICING: ModelPricing = {
-  input: 3.0,
-  output: 15.0,
-  cache_read: 0.3,
-  cache_creation: 3.75,
-};
-
-export function getPricing(modelName: string): ModelPricing {
-  const nameTokens: string[] = modelName.toLowerCase().match(/[a-z0-9]+/g) ?? [];
-  for (const [key, pricing] of Object.entries(MODEL_PRICING)) {
-    const keyTokens: string[] = key.match(/[a-z0-9]+/g) ?? [];
-    if (keyTokens.every((t) => nameTokens.includes(t))) return pricing;
-  }
-  return DEFAULT_PRICING;
-}
-
-function costUsd(
-  modelName: string,
-  inputTok: number,
-  outputTok: number,
-  cacheReadTok: number,
-  cacheCreationTok: number
-): number {
-  const p = getPricing(modelName);
-  return (
-    (inputTok * p.input +
-      outputTok * p.output +
-      cacheReadTok * p.cache_read +
-      cacheCreationTok * p.cache_creation) /
-    1_000_000
-  );
-}
+// Re-export getDisplayPricing as getPricing for backward compat with CostSection
+export { getDisplayPricing as getPricing } from '@shared/utils/pricing';
 
 // =============================================================================
 // Helpers
@@ -473,7 +400,7 @@ export function analyzeSession(detail: SessionDetail): SessionReport {
       stats.cacheCreation += cc;
       stats.cacheRead += cr;
 
-      const callCost = costUsd(model, inpTok, outTok, cr, cc);
+      const callCost = calculateMessageCost(model, inpTok, outTok, cr, cc);
       stats.costUsd += callCost;
       parentCost += callCost;
 
@@ -897,7 +824,7 @@ export function analyzeSession(detail: SessionDetail): SessionReport {
       proc.messages.find((m: ParsedMessage) => m.type === 'assistant' && m.model)?.model ??
       'default (inherits parent)';
     // Compute cost from subagent token breakdown (proc.metrics.costUsd is not populated upstream)
-    const computedCost = costUsd(
+    const computedCost = calculateMessageCost(
       subagentModel,
       proc.metrics.inputTokens,
       proc.metrics.outputTokens,
