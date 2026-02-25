@@ -298,8 +298,8 @@ export function analyzeSession(detail: SessionDetail): SessionReport {
   // Test progression
   const testSnapshots: TestSnapshot[] = [];
 
-  // Cost tracking
-  let parentCost = 0;
+  // Cost tracking — use the pre-computed cost from calculateMetrics() as single source of truth
+  const parentCost = detail.metrics.costUsd ?? 0;
 
   // Git activity
   const gitCommits: GitCommit[] = [];
@@ -402,7 +402,6 @@ export function analyzeSession(detail: SessionDetail): SessionReport {
 
       const callCost = calculateMessageCost(model, inpTok, outTok, cr, cc);
       stats.costUsd += callCost;
-      parentCost += callCost;
 
       totalCacheCreation += cc;
       totalCacheRead += cr;
@@ -823,14 +822,7 @@ export function analyzeSession(detail: SessionDetail): SessionReport {
     const subagentModel =
       proc.messages.find((m: ParsedMessage) => m.type === 'assistant' && m.model)?.model ??
       'default (inherits parent)';
-    // Compute cost from subagent token breakdown (proc.metrics.costUsd is not populated upstream)
-    const computedCost = calculateMessageCost(
-      subagentModel,
-      proc.metrics.inputTokens,
-      proc.metrics.outputTokens,
-      proc.metrics.cacheReadTokens,
-      proc.metrics.cacheCreationTokens
-    );
+    const computedCost = proc.metrics.costUsd ?? 0;
     return {
       description: desc,
       subagentType: proc.subagentType ?? 'unknown',

@@ -173,6 +173,7 @@ describe('analyzeSession', () => {
         createMockDetail({
           messages,
           session: createMockSession({ messageCount: 4 }),
+          metrics: createMockMetrics({ costUsd: 0.025 }),
         })
       );
 
@@ -188,9 +189,9 @@ describe('analyzeSession', () => {
       expect(report.tokenUsage.totals.cacheCreation).toBe(100);
       expect(report.tokenUsage.totals.grandTotal).toBe(4000);
 
-      // Cost should be positive (sonnet-4 pricing)
-      expect(report.costAnalysis.parentCostUsd).toBeGreaterThan(0);
-      expect(report.costAnalysis.totalSessionCostUsd).toBeGreaterThan(0);
+      // Cost reads from detail.metrics.costUsd (single source of truth)
+      expect(report.costAnalysis.parentCostUsd).toBe(0.025);
+      expect(report.costAnalysis.totalSessionCostUsd).toBe(0.025);
 
       // Message types
       expect(report.messageTypes.user).toBe(2);
@@ -1504,6 +1505,86 @@ describe('analyzeSession', () => {
       const report = analyzeSession(createMockDetail({ processes }));
       // model is 'default (inherits parent)' which doesn't contain 'opus', so no mismatch
       expect(report.subagentMetrics.byAgent[0].modelMismatch).toBeNull();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Unified cost — single source of truth
+  // -------------------------------------------------------------------------
+  describe('unified cost computation', () => {
+    it('parentCostUsd reads from detail.metrics.costUsd', () => {
+      const report = analyzeSession(
+        createMockDetail({
+          metrics: createMockMetrics({ costUsd: 1.2345 }),
+        })
+      );
+      expect(report.costAnalysis.parentCostUsd).toBe(1.2345);
+    });
+
+    it('parentCostUsd defaults to 0 when detail.metrics.costUsd is undefined', () => {
+      const report = analyzeSession(createMockDetail());
+      expect(report.costAnalysis.parentCostUsd).toBe(0);
+    });
+
+    it('subagent cost reads from proc.metrics.costUsd', () => {
+      const processes: Process[] = [
+        {
+          id: 'agent-1',
+          filePath: '/path/to/agent-1.jsonl',
+          messages: [],
+          startTime: new Date('2024-01-01T10:00:00Z'),
+          endTime: new Date('2024-01-01T10:01:00Z'),
+          durationMs: 60000,
+          metrics: createMockMetrics({ totalTokens: 5000, costUsd: 0.15 }),
+          description: 'research task',
+          subagentType: 'explore',
+          isParallel: false,
+        },
+        {
+          id: 'agent-2',
+          filePath: '/path/to/agent-2.jsonl',
+          messages: [],
+          startTime: new Date('2024-01-01T10:01:00Z'),
+          endTime: new Date('2024-01-01T10:02:00Z'),
+          durationMs: 60000,
+          metrics: createMockMetrics({ totalTokens: 3000, costUsd: 0.10 }),
+          description: 'test runner',
+          subagentType: 'code',
+          isParallel: false,
+        },
+      ];
+
+      const report = analyzeSession(createMockDetail({ processes }));
+      expect(report.subagentMetrics.byAgent[0].costUsd).toBe(0.15);
+      expect(report.subagentMetrics.byAgent[1].costUsd).toBe(0.10);
+      expect(report.costAnalysis.subagentCostUsd).toBe(0.25);
+    });
+
+    it('totalSessionCostUsd equals parent + subagent costs', () => {
+      const processes: Process[] = [
+        {
+          id: 'agent-1',
+          filePath: '/path/to/agent-1.jsonl',
+          messages: [],
+          startTime: new Date('2024-01-01T10:00:00Z'),
+          endTime: new Date('2024-01-01T10:01:00Z'),
+          durationMs: 60000,
+          metrics: createMockMetrics({ totalTokens: 5000, costUsd: 0.30 }),
+          description: 'task',
+          subagentType: 'code',
+          isParallel: false,
+        },
+      ];
+
+      const report = analyzeSession(
+        createMockDetail({
+          metrics: createMockMetrics({ costUsd: 0.50 }),
+          processes,
+        })
+      );
+      expect(report.costAnalysis.parentCostUsd).toBe(0.50);
+      expect(report.costAnalysis.subagentCostUsd).toBe(0.30);
+      expect(report.costAnalysis.totalSessionCostUsd).toBe(0.80);
     });
   });
 });
