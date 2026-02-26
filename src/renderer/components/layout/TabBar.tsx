@@ -394,12 +394,8 @@ export const TabBar = ({ paneId }: TabBarProps): React.JSX.Element => {
           )}
         </button>
 
-        {/* More menu (Search, Export, Analyze, Settings) */}
-        <MoreMenu
-          activeTab={activeTab}
-          activeTabSessionDetail={activeTabSessionDetail}
-          activeTabId={activeTabId}
-        />
+        {/* More menu (Search, Export, Settings) */}
+        <MoreMenu activeTab={activeTab} activeTabSessionDetail={activeTabSessionDetail} />
       </div>
 
       {/* Context menu */}
