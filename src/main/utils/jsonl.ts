@@ -116,6 +116,7 @@ function parseChatHistoryEntry(entry: ChatHistoryEntry): ParsedMessage | null {
   let role: string | undefined;
   let usage: TokenUsage | undefined;
   let model: string | undefined;
+  let requestId: string | undefined;
   let cwd: string | undefined;
   let gitBranch: string | undefined;
   let agentId: string | undefined;
@@ -154,6 +155,7 @@ function parseChatHistoryEntry(entry: ChatHistoryEntry): ParsedMessage | null {
       usage = entry.message.usage;
       model = entry.message.model;
       agentId = entry.agentId;
+      requestId = entry.requestId;
     } else if (entry.type === 'system') {
       isMeta = entry.isMeta ?? false;
     }
@@ -186,6 +188,7 @@ function parseChatHistoryEntry(entry: ChatHistoryEntry): ParsedMessage | null {
     sourceToolUseID,
     sourceToolAssistantUUID,
     toolUseResult,
+    requestId,
   };
 }
 
@@ -213,16 +216,55 @@ function parseMessageType(type?: string): MessageType | null {
 }
 
 // =============================================================================
+// Streaming Deduplication
+// =============================================================================
+
+/**
+ * Deduplicate streaming assistant entries by requestId.
+ *
+ * Claude Code writes multiple JSONL entries per API response during streaming,
+ * each with the same requestId but incrementally increasing output_tokens.
+ * Only the last entry per requestId has the final, complete token counts.
+ *
+ * Messages without a requestId (user, system, etc.) pass through unchanged.
+ * Returns a new array with only the last entry per requestId kept.
+ */
+export function deduplicateByRequestId(messages: ParsedMessage[]): ParsedMessage[] {
+  // Map from requestId -> index of last occurrence
+  const lastIndexByRequestId = new Map<string, number>();
+  for (let i = 0; i < messages.length; i++) {
+    const rid = messages[i].requestId;
+    if (rid) {
+      lastIndexByRequestId.set(rid, i);
+    }
+  }
+
+  // If no requestIds found, no dedup needed
+  if (lastIndexByRequestId.size === 0) {
+    return messages;
+  }
+
+  return messages.filter((msg, i) => {
+    if (!msg.requestId) return true;
+    return lastIndexByRequestId.get(msg.requestId) === i;
+  });
+}
+
+// =============================================================================
 // Metrics Calculation
 // =============================================================================
 
 /**
  * Calculate session metrics from parsed messages.
+ * Deduplicates streaming entries by requestId before summing to avoid overcounting.
  */
 export function calculateMetrics(messages: ParsedMessage[]): SessionMetrics {
   if (messages.length === 0) {
     return { ...EMPTY_METRICS };
   }
+
+  // Deduplicate streaming entries: keep only the last entry per requestId
+  const dedupedMessages = deduplicateByRequestId(messages);
 
   let inputTokens = 0;
   let outputTokens = 0;
@@ -244,7 +286,7 @@ export function calculateMetrics(messages: ParsedMessage[]): SessionMetrics {
     }
   }
 
-  for (const msg of messages) {
+  for (const msg of dedupedMessages) {
     if (msg.usage) {
       inputTokens += msg.usage.input_tokens ?? 0;
       outputTokens += msg.usage.output_tokens ?? 0;
