@@ -32,6 +32,7 @@ import {
   highlightSearchInChildren,
   type SearchContext,
 } from '../searchHighlightUtils';
+import { highlightLine } from '../viewers/syntaxHighlighter';
 
 // =============================================================================
 // Types
@@ -154,9 +155,18 @@ function createViewerMarkdownComponents(searchCtx: SearchContext | null): Compon
       const isBlock = (hasLanguage ?? false) || isMultiLine;
 
       if (isBlock) {
+        const lang = codeClassName?.replace('language-', '') ?? '';
+        const raw = typeof children === 'string' ? children : '';
+        const text = raw.replace(/\n$/, '');
+        const lines = text.split('\n');
         return (
           <code className="font-mono text-xs" style={{ color: COLOR_TEXT }}>
-            {hl(children)}
+            {lines.map((line, i) => (
+              <React.Fragment key={i}>
+                {hl(highlightLine(line, lang))}
+                {i < lines.length - 1 ? '\n' : null}
+              </React.Fragment>
+            ))}
           </code>
         );
       }
