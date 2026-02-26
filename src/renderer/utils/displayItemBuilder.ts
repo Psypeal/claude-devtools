@@ -425,7 +425,8 @@ export function buildDisplayItemsFromMessages(
       }
       // Only treat as subagent input if there are NO tool_result blocks in this message
       const hasToolResults =
-        Array.isArray(msg.content) && msg.content.some((b) => b.type === 'tool_result');
+        Array.isArray(msg.content) &&
+        msg.content.some((b) => b.type === 'tool_result');
       if (rawText.trim() && !hasToolResults) {
         displayItems.push({
           type: 'subagent_input',
