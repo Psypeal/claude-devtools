@@ -33,7 +33,6 @@ interface MenuItem {
 export const MoreMenu = ({
   activeTab,
   activeTabSessionDetail,
-  activeTabId,
 }: Readonly<MoreMenuProps>): React.JSX.Element => {
   const [isOpen, setIsOpen] = useState(false);
   const [buttonHover, setButtonHover] = useState(false);
