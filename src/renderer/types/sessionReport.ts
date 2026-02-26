@@ -20,7 +20,12 @@ import type {
 // Pricing
 // =============================================================================
 
-export type { DisplayPricing as ModelPricing } from '@shared/utils/pricing';
+export interface ModelPricing {
+  input: number;
+  output: number;
+  cache_read: number;
+  cache_creation: number;
+}
 
 // =============================================================================
 // Report Sections

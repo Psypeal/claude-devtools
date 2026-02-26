@@ -28,9 +28,7 @@ interface SessionContextHeaderProps {
   totalTokens: number;
   totalSessionTokens?: number;
   sessionMetrics?: SessionMetrics;
-  subagentCostUsd?: number;
   onClose?: () => void;
-  onViewReport?: () => void;
   phaseInfo?: ContextPhaseInfo;
   selectedPhase: number | null;
   onPhaseChange: (phase: number | null) => void;
@@ -43,9 +41,7 @@ export const SessionContextHeader = ({
   totalTokens,
   totalSessionTokens,
   sessionMetrics,
-  subagentCostUsd,
   onClose,
-  onViewReport,
   phaseInfo,
   selectedPhase,
   onPhaseChange,
@@ -134,30 +130,8 @@ export const SessionContextHeader = ({
             <div className="col-span-2">
               <span style={{ color: COLOR_TEXT_MUTED }}>Session Cost: </span>
               <span className="font-medium tabular-nums" style={{ color: COLOR_TEXT_SECONDARY }}>
-                {formatCostUsd(sessionMetrics.costUsd + (subagentCostUsd ?? 0))}
+                {formatCostUsd(sessionMetrics.costUsd)}
               </span>
-              {subagentCostUsd !== undefined && subagentCostUsd > 0 && (
-                <span style={{ color: COLOR_TEXT_MUTED }}>
-                  {' ('}
-                  {formatCostUsd(sessionMetrics.costUsd)}
-                  {' parent + '}
-                  {formatCostUsd(subagentCostUsd)}
-                  {' subagents'}
-                  {onViewReport && (
-                    <>
-                      {' · '}
-                      <button
-                        onClick={onViewReport}
-                        className="underline"
-                        style={{ color: COLOR_TEXT_SECONDARY }}
-                      >
-                        details
-                      </button>
-                    </>
-                  )}
-                  {')'}
-                </span>
-              )}
             </div>
           )}
         </div>
