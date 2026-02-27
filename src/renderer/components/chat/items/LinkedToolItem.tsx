@@ -14,6 +14,7 @@ import {
   getToolContextTokens,
   getToolStatus,
   getToolSummary,
+  hasBashContent,
   hasEditContent,
   hasReadContent,
   hasSkillInstructions,
@@ -31,6 +32,7 @@ import { Wrench } from 'lucide-react';
 import { BaseItem, StatusDot } from './BaseItem';
 import { formatDuration } from './baseItemHelpers';
 import {
+  BashToolViewer,
   DefaultToolViewer,
   EditToolViewer,
   ReadToolViewer,
@@ -39,6 +41,7 @@ import {
   WriteToolViewer,
 } from './linkedTool';
 
+import type { StepVariant } from '@renderer/constants/stepVariants';
 import type { LinkedToolItem as LinkedToolItemType } from '@renderer/types/groups';
 
 interface LinkedToolItemProps {
@@ -139,7 +142,12 @@ export const LinkedToolItem: React.FC<LinkedToolItemProps> = ({
   const useWriteViewer =
     linkedTool.name === 'Write' && hasWriteContent(linkedTool) && !linkedTool.result?.isError;
   const useSkillViewer = linkedTool.name === 'Skill' && hasSkillInstructions(linkedTool);
-  const useDefaultViewer = !useReadViewer && !useEditViewer && !useWriteViewer && !useSkillViewer;
+  const useBashViewer = linkedTool.name === 'Bash' && hasBashContent(linkedTool);
+  const useDefaultViewer =
+    !useReadViewer && !useEditViewer && !useWriteViewer && !useSkillViewer && !useBashViewer;
+
+  // Determine step variant for colored borders/icons
+  const toolVariant: StepVariant = status === 'error' ? 'tool-error' : 'tool';
 
   // Check if we should show error display for Read/Write tools
   const showReadError = linkedTool.name === 'Read' && linkedTool.result?.isError;
@@ -164,6 +172,7 @@ export const LinkedToolItem: React.FC<LinkedToolItemProps> = ({
         highlightClasses={highlightClasses}
         highlightStyle={highlightStyle}
         notificationDotColor={notificationDotColor}
+        variant={toolVariant}
       >
         {/* Read tool with CodeBlockViewer */}
         {useReadViewer && <ReadToolViewer linkedTool={linkedTool} />}
@@ -176,6 +185,9 @@ export const LinkedToolItem: React.FC<LinkedToolItemProps> = ({
 
         {/* Skill tool with instructions */}
         {useSkillViewer && <SkillToolViewer linkedTool={linkedTool} />}
+
+        {/* Bash tool with syntax-highlighted command */}
+        {useBashViewer && <BashToolViewer linkedTool={linkedTool} status={status} />}
 
         {/* Default rendering for other tools */}
         {useDefaultViewer && <DefaultToolViewer linkedTool={linkedTool} status={status} />}
