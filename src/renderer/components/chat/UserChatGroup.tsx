@@ -10,8 +10,6 @@ import { User } from 'lucide-react';
 import remarkGfm from 'remark-gfm';
 import { useShallow } from 'zustand/react/shallow';
 
-import { CopyButton } from '../common/CopyButton';
-
 import {
   createSearchContext,
   highlightSearchInChildren,
@@ -439,8 +437,6 @@ const UserChatGroupInner = ({ userGroup }: Readonly<UserChatGroupProps>): React.
               boxShadow: 'var(--chat-user-shadow)',
             }}
           >
-            <CopyButton text={textContent} bgColor="var(--chat-user-bg)" />
-
             <div className="text-sm" style={{ color: 'var(--chat-user-text)' }} data-search-content>
               <ReactMarkdown remarkPlugins={[remarkGfm]} components={userMarkdownComponents}>
                 {displayText}

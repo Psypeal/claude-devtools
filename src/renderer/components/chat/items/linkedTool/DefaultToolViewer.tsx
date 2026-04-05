@@ -19,24 +19,28 @@ interface DefaultToolViewerProps {
 }
 
 export const DefaultToolViewer: React.FC<DefaultToolViewerProps> = ({ linkedTool, status }) => {
+  const hasInput = Object.keys(linkedTool.input).length > 0;
+
   return (
     <>
       {/* Input Section */}
-      <div>
-        <div className="mb-1 text-xs" style={{ color: 'var(--tool-item-muted)' }}>
-          Input
+      {hasInput && (
+        <div>
+          <div className="mb-1 text-xs" style={{ color: 'var(--tool-item-muted)' }}>
+            Input
+          </div>
+          <div
+            className="max-h-96 overflow-auto rounded p-3 font-mono text-xs"
+            style={{
+              backgroundColor: 'var(--code-bg)',
+              border: '1px solid var(--code-border)',
+              color: 'var(--color-text-secondary)',
+            }}
+          >
+            {renderInput(linkedTool.name, linkedTool.input)}
+          </div>
         </div>
-        <div
-          className="max-h-96 overflow-auto rounded p-3 font-mono text-xs"
-          style={{
-            backgroundColor: 'var(--code-bg)',
-            border: '1px solid var(--code-border)',
-            color: 'var(--color-text-secondary)',
-          }}
-        >
-          {renderInput(linkedTool.name, linkedTool.input)}
-        </div>
-      </div>
+      )}
 
       {/* Output Section — Collapsed by default */}
       {!linkedTool.isOrphaned && linkedTool.result && (
