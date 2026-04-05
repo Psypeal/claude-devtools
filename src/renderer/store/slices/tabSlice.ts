@@ -264,7 +264,6 @@ export const createTabSlice: StateCreator<AppState, [], [], TabSlice> = (set, ge
     if (tab.type === 'session' && tab.sessionId && tab.projectId) {
       const sessionId = tab.sessionId;
       const projectId = tab.projectId;
-      const sessionChanged = state.selectedSessionId !== sessionId;
 
       // Check if per-tab data is already cached
       const cachedTabData = state.tabSessionData[tabId];
@@ -297,24 +296,24 @@ export const createTabSlice: StateCreator<AppState, [], [], TabSlice> = (set, ge
         if (worktreeChanged) {
           void get().fetchSessionsInitial(foundWorktree);
         }
-        if (sessionChanged) {
-          if (hasCachedData) {
-            // Swap global state from per-tab cache (no re-fetch)
-            set({
-              sessionDetail: cachedTabData.sessionDetail,
-              conversation: cachedTabData.conversation,
-              conversationLoading: false,
-              sessionDetailLoading: false,
-              sessionDetailError: null,
-              sessionClaudeMdStats: cachedTabData.sessionClaudeMdStats,
-              sessionContextStats: cachedTabData.sessionContextStats,
-              sessionPhaseInfo: cachedTabData.sessionPhaseInfo,
-              visibleAIGroupId: cachedTabData.visibleAIGroupId,
-              selectedAIGroup: cachedTabData.selectedAIGroup,
-            });
-          } else {
-            void get().fetchSessionDetail(foundWorktree, sessionId, tabId);
-          }
+        // Always swap conversation to match this tab — the global conversation
+        // may belong to a different tab even when selectedSessionId matches.
+        if (hasCachedData) {
+          // Swap global state from per-tab cache (no re-fetch)
+          set({
+            sessionDetail: cachedTabData.sessionDetail,
+            conversation: cachedTabData.conversation,
+            conversationLoading: false,
+            sessionDetailLoading: false,
+            sessionDetailError: null,
+            sessionClaudeMdStats: cachedTabData.sessionClaudeMdStats,
+            sessionContextStats: cachedTabData.sessionContextStats,
+            sessionPhaseInfo: cachedTabData.sessionPhaseInfo,
+            visibleAIGroupId: cachedTabData.visibleAIGroupId,
+            selectedAIGroup: cachedTabData.selectedAIGroup,
+          });
+        } else {
+          void get().fetchSessionDetail(foundWorktree, sessionId, tabId);
         }
         return;
       }
@@ -333,24 +332,24 @@ export const createTabSlice: StateCreator<AppState, [], [], TabSlice> = (set, ge
         if (projectChanged) {
           void get().fetchSessionsInitial(project.id);
         }
-        if (sessionChanged) {
-          if (hasCachedData) {
-            // Swap global state from per-tab cache (no re-fetch)
-            set({
-              sessionDetail: cachedTabData.sessionDetail,
-              conversation: cachedTabData.conversation,
-              conversationLoading: false,
-              sessionDetailLoading: false,
-              sessionDetailError: null,
-              sessionClaudeMdStats: cachedTabData.sessionClaudeMdStats,
-              sessionContextStats: cachedTabData.sessionContextStats,
-              sessionPhaseInfo: cachedTabData.sessionPhaseInfo,
-              visibleAIGroupId: cachedTabData.visibleAIGroupId,
-              selectedAIGroup: cachedTabData.selectedAIGroup,
-            });
-          } else {
-            void get().fetchSessionDetail(project.id, sessionId, tabId);
-          }
+        // Always swap conversation to match this tab — the global conversation
+        // may belong to a different tab even when selectedSessionId matches.
+        if (hasCachedData) {
+          // Swap global state from per-tab cache (no re-fetch)
+          set({
+            sessionDetail: cachedTabData.sessionDetail,
+            conversation: cachedTabData.conversation,
+            conversationLoading: false,
+            sessionDetailLoading: false,
+            sessionDetailError: null,
+            sessionClaudeMdStats: cachedTabData.sessionClaudeMdStats,
+            sessionContextStats: cachedTabData.sessionContextStats,
+            sessionPhaseInfo: cachedTabData.sessionPhaseInfo,
+            visibleAIGroupId: cachedTabData.visibleAIGroupId,
+            selectedAIGroup: cachedTabData.selectedAIGroup,
+          });
+        } else {
+          void get().fetchSessionDetail(project.id, sessionId, tabId);
         }
         return;
       }
